@@ -1,0 +1,18 @@
+// SPDX-FileCopyrightText: 2026 PROJECT_NAME contributors
+// SPDX-License-Identifier: CC0-1.0
+
+// Configuration for markdownlint-cli2, run locally and in CI.
+// Rules: https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+{
+  "config": {
+    "default": true,
+    // Prose wraps at ~78 columns by convention, but tables and URLs cannot.
+    "MD013": false
+  },
+  "globs": ["**/*.md"],
+  "ignores": [
+    "node_modules/**",
+    // Copied verbatim from the official Contributor Covenant text.
+    "CODE_OF_CONDUCT.md"
+  ]
+}
