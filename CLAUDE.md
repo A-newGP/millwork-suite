@@ -18,23 +18,16 @@ llega en fases posteriores.
 El fundador (Andrés) es nuevo en open source. **Explica cada decisión en
 español sencillo y con el porqué** antes de aplicarla.
 
-## Fase actual: Fase 1b — Diseño
+## Fase actual: Fase 1a — Entorno del repositorio
 
 La Fase 1 del plan se divide en dos partes:
 
-- **1a — Entorno (cerrada):** repositorio, licencias, archivos de comunidad,
-  CI de documentación y ADRs de las decisiones ya tomadas.
-- **1b — Diseño (actual):** RFC-0001 (modelo de proyecto), ADR de unidades y
+- **1a — Entorno (actual):** repositorio, licencias, archivos de comunidad,
+  CI de documentación y ADRs de las decisiones ya tomadas. **No se escribe
+  código de la aplicación.**
+- **1b — Diseño:** RFC-0001 (modelo de proyecto), ADR de unidades y
   precisión, ADR del stack con prototipos desechables comparables, RFC-0002
-  (arquitectura de módulos y plugins). El único código permitido son esos
-  prototipos desechables, hasta que el ADR del stack esté aceptado.
-
-Alcance acordado para la versión 0.1 (Fase 2): construcción frameless **y**
-face frame, operaciones de mecanizado modeladas (taller manual y CNC), y
-gabinetes ubicados en paredes con elevaciones.
-
-Desde la Fase 1b los cambios entran por rama y pull request, no directo a
-`main`.
+  (arquitectura de módulos y plugins). Recién aquí empieza el código.
 
 La Fase 0 está cerrada: el contrato laboral fue revisado por un abogado y se
 autorizó publicar.
@@ -115,5 +108,4 @@ documentos de proceso (MAINTAINERS, CODEOWNERS, CHANGELOG con entradas, repo
   ([`docs/es/guia-github.md`](docs/es/guia-github.md)).
 - Hacer push sin permiso explícito de Andrés en esa sesión.
 - Manejar contraseñas, tokens ni secretos.
-- Escribir código de la aplicación antes de que el ADR del stack esté
-  aceptado (salvo prototipos desechables).
+- Escribir código de la aplicación durante la Fase 1a.
