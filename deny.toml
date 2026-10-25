@@ -42,6 +42,8 @@ private = { ignore = true }
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# Our own crates refer to each other by path, which counts as a wildcard.
+allow-wildcard-paths = true
 
 [sources]
 unknown-registry = "deny"
