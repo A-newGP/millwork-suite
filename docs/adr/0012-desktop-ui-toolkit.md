@@ -5,7 +5,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # 0012 — Desktop user interface toolkit
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-10-25
 - **Deciders:** Andrés (@A-newGP)
 
@@ -103,7 +103,7 @@ What the spike shows:
 
 ## Decision outcome
 
-Proposed option: **Slint**, because it best meets the hard drivers together:
+Chosen option: **Slint**, because it best meets the hard drivers together:
 
 - **Footprint:** the lowest memory and the fastest start on Windows.
 - **Accessibility and testing by construction:** tests go through the same
