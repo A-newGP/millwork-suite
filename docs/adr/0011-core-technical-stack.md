@@ -5,7 +5,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # 0011 — Rust for the core
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-10-25
 - **Deciders:** Andrés (@A-newGP)
 
@@ -91,7 +91,7 @@ What the spike shows:
 
 ## Decision outcome
 
-Proposed option: **Rust for the core**, because it is the only option that
+Chosen option: **Rust for the core**, because it is the only option that
 satisfies all the hard drivers at once:
 
 - **WASM is first-class.** The same core compiles to small WASM modules, and
