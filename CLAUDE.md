@@ -87,6 +87,9 @@ documentos de proceso (MAINTAINERS, CODEOWNERS, CHANGELOG con entradas, repo
 - Interfaz gráfica de escritorio en **Slint** (ADR-0012), con egui como
   alternativa. Slint es GPL-3.0-only: el programa distribuido queda en la
   práctica bajo GPL-3.0.
+- Equipo modesto (ADR-0014): equipo de referencia de unos diez años (2
+  núcleos, 4 GB, sin GPU, 1366 × 768) y presupuestos de rendimiento que la
+  CI vigila desde la Fase 2.
 
 ## Decisiones pendientes (no tomarlas por tu cuenta)
 
