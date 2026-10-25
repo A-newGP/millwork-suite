@@ -83,20 +83,20 @@ Apache-2.0, BSD, Zlib, Unicode-3.0), all compatible with GPL-3.0-or-later.
 
 ### PDF
 
-4. **krilla embeds the font; printpdf uses the built-in Helvetica.**
+1. **krilla embeds the font; printpdf uses the built-in Helvetica.**
    Embedding makes every reader show the same thing and covers all of
    Unicode, at the cost of a larger file and of needing a font. Built-in
    fonts are small but limited to the Western European character set, and
    each reader substitutes its own Helvetica.
-5. **The product must ship its own font.** krilla here searches for a
+2. **The product must ship its own font.** krilla here searches for a
    system font, which differs between machines. OpenCabinet should bundle
    one open font (for example under the SIL Open Font License) so drawings
    look the same everywhere.
-6. **Neither library measures text.** Centering a dimension label needs
+3. **Neither library measures text.** Centering a dimension label needs
    the text's width; the spike estimates it. A text layout library
    (parley, which krilla supports, or rustybuzz) is needed for production
    quality labels.
-7. **Recommendation for phase 2:** krilla. It is the one with embedded
+4. **Recommendation for phase 2:** krilla. It is the one with embedded
    fonts, full Unicode, and support for archival PDF/A and tagged
    (accessible) PDF, which matters for drawings kept for years and for
    screen reader users. printpdf pulls in more crates even with its HTML
@@ -104,7 +104,7 @@ Apache-2.0, BSD, Zlib, Unicode-3.0), all compatible with GPL-3.0-or-later.
 
 ### CSV
 
-8. **CSV needs no library, but Excel in Spanish reads it wrong.** The
+1. **CSV needs no library, but Excel in Spanish reads it wrong.** The
    standard (RFC 4180) uses commas, and every inch mark forces quoting.
    Excel in locales that write decimals with a comma, Spanish among them,
    expects semicolons and splits the file wrongly. Version 0.1 should let
