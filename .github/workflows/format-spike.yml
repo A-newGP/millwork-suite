@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: 2026 OpenCabinet contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Tests and measures the throwaway .ocab format prototype.
+# Removed together with prototypes/format-spike once RFC-0001 is accepted.
+
+name: Format spike
+
+on:
+  pull_request:
+    paths:
+      - prototypes/format-spike/**
+      - .github/workflows/format-spike.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+    working-directory: prototypes/format-spike
+
+jobs:
+  test:
+    name: Format spike (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install toolchain
+        run: rustup toolchain install stable --profile minimal --component clippy,rustfmt && rustup default stable
+      - name: Fetch dependencies
+        run: cargo fetch --locked
+      - name: Format and lint
+        run: cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --locked
+      - name: Measure
+        run: |
+          cargo build --locked --release
+          for n in 10 100 1000 10000; do
+            ./target/release/oc-format bench "$n"
+          done | awk 'NR <= 2 || !/^\| (Products|---)/' | tee -a "$GITHUB_STEP_SUMMARY"
+          ./target/release/oc-format check tests/fixtures/kitchen.ocab
