@@ -25,6 +25,9 @@ allow = [
   "BSD-3-Clause",
   "BSL-1.0",
   "CC0-1.0",
+  # Slint, the interface toolkit (ADR-0012), is GPL-3.0-only or proprietary;
+  # OpenCabinet uses it under the GPL (ADR-0013).
+  "GPL-3.0-only",
   "ISC",
   "MIT",
   "MPL-2.0",

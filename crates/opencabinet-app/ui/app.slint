@@ -1,0 +1,158 @@
+// SPDX-FileCopyrightText: 2026 OpenCabinet contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import { LineEdit, Palette } from "std-widgets.slint";
+
+// A length field: a label, the text as typed, and below it either the value
+// read back in the display precision or why it cannot be read.
+component LengthField inherits VerticalLayout {
+    in property <string> label;
+    in-out property <string> text;
+    in property <string> reading;
+    in property <string> error;
+    callback edited(text: string);
+    spacing: 4px;
+
+    Text { text: root.label; }
+    LineEdit {
+        accessible-label: root.label;
+        text <=> root.text;
+        edited(text) => { root.edited(text); }
+    }
+    Text {
+        text: root.error != "" ? root.error : root.reading;
+        color: root.error != "" ? #c62828 : Palette.foreground.transparentize(40%);
+        font-size: 12px;
+        wrap: word-wrap;
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "OpenCabinet Designer";
+    // Usable on the 1366 × 768 screen of the reference computer (ADR-0014).
+    preferred-width: 1280px;
+    preferred-height: 720px;
+    min-width: 960px;
+    min-height: 600px;
+
+    in property <bool> metric;
+    in property <string> status;
+    in-out property <string> width-text;
+    in-out property <string> height-text;
+    in-out property <string> depth-text;
+    in property <string> width-reading;
+    in property <string> height-reading;
+    in property <string> depth-reading;
+    in property <string> width-error;
+    in property <string> height-error;
+    in property <string> depth-error;
+    // The cabinet's front as a width-to-height ratio, for the preview.
+    in property <float> front-ratio: 1;
+
+    callback width-edited(text: string);
+    callback height-edited(text: string);
+    callback depth-edited(text: string);
+    callback units-chosen(metric: bool);
+    callback new-project();
+    callback about();
+    callback quit();
+
+    MenuBar {
+        Menu {
+            title: "File";
+            MenuItem { title: "New project"; activated => { root.new-project(); } }
+            MenuItem { title: "Open…"; enabled: false; }
+            MenuItem { title: "Save"; enabled: false; }
+            MenuSeparator { }
+            MenuItem { title: "Quit"; activated => { root.quit(); } }
+        }
+        Menu {
+            title: "Units";
+            MenuItem {
+                title: "Imperial (inches)";
+                checkable: true;
+                checked: !root.metric;
+                activated => { root.units-chosen(false); }
+            }
+            MenuItem {
+                title: "Metric (millimeters)";
+                checkable: true;
+                checked: root.metric;
+                activated => { root.units-chosen(true); }
+            }
+        }
+        Menu {
+            title: "Help";
+            MenuItem { title: "About OpenCabinet"; activated => { root.about(); } }
+        }
+    }
+
+    VerticalLayout {
+        HorizontalLayout {
+            vertical-stretch: 1;
+
+            VerticalLayout {
+                width: 260px;
+                padding: 16px;
+                spacing: 12px;
+                alignment: start;
+                Text { text: "Cabinet"; font-size: 18px; font-weight: 700; }
+                LengthField {
+                    label: "Width";
+                    text <=> root.width-text;
+                    reading: root.width-reading;
+                    error: root.width-error;
+                    edited(text) => { root.width-edited(text); }
+                }
+                LengthField {
+                    label: "Height";
+                    text <=> root.height-text;
+                    reading: root.height-reading;
+                    error: root.height-error;
+                    edited(text) => { root.height-edited(text); }
+                }
+                LengthField {
+                    label: "Depth";
+                    text <=> root.depth-text;
+                    reading: root.depth-reading;
+                    error: root.depth-error;
+                    edited(text) => { root.depth-edited(text); }
+                }
+            }
+
+            // The drawing area. For now it shows the front's proportions;
+            // elevations arrive with the evaluator.
+            Rectangle {
+                horizontal-stretch: 1;
+                background: Palette.alternate-background;
+                property <length> room-w: self.width - 64px;
+                property <length> room-h: self.height - 64px;
+                property <length> front-w: min(self.room-w, self.room-h * root.front-ratio);
+                property <length> front-h: self.front-w / root.front-ratio;
+
+                Rectangle {
+                    accessible-role: image;
+                    accessible-label: "Cabinet front";
+                    width: parent.front-w;
+                    height: parent.front-h;
+                    border-color: Palette.foreground;
+                    border-width: 1px;
+                }
+            }
+        }
+
+        Rectangle {
+            height: 28px;
+            background: Palette.alternate-background;
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                Text {
+                    text: root.status;
+                    vertical-alignment: center;
+                    font-size: 12px;
+                }
+            }
+        }
+    }
+}
