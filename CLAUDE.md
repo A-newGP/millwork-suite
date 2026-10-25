@@ -18,7 +18,7 @@ llega en fases posteriores.
 El fundador (Andrés) es nuevo en open source. **Explica cada decisión en
 español sencillo y con el porqué** antes de aplicarla.
 
-## Fase actual: Fase 1b — Diseño
+## Fase actual: Fase 1b — Diseño, con la Fase 2 iniciada en paralelo
 
 La Fase 1 del plan se divide en dos partes:
 
@@ -29,9 +29,17 @@ La Fase 1 del plan se divide en dos partes:
   plugins) y ADR-0012 (interfaz: Slint, aceptado). Los RFCs pasan al menos 14 días
   en comentarios públicos antes de aceptarse.
 
-El único código permitido en la Fase 1b son **prototipos desechables** en
-`prototypes/`, para reunir evidencia para un ADR; se borran cuando el ADR se
-acepta. El código de la aplicación empieza en la Fase 2.
+El 2026-10-25 Andrés decidió **empezar la Fase 2 sin esperar** a que cierren
+los comentarios de los RFCs (8 de noviembre). Reglas mientras tanto:
+
+- Los RFCs se aceptan igual al cumplir sus 14 días; no se acorta un período
+  anunciado.
+- El código de la aplicación vive en `crates/` y empieza por lo que no
+  depende de los puntos abiertos de los RFCs (workspace, CI, longitudes,
+  esqueleto de la interfaz, instalador). Lo que dependa de ellos se ajusta
+  cuando se acepten.
+- Los **prototipos desechables** siguen en `prototypes/` y se borran cuando
+  su ADR o RFC se acepta.
 
 Alcance acordado para la versión 0.1 (Fase 2): construcción frameless **y**
 face frame, operaciones de mecanizado modeladas (taller manual y CNC), y
