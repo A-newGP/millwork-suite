@@ -18,6 +18,10 @@ end_of_line = crlf
 [Makefile]
 indent_style = tab
 
+# Language conventions: 4 spaces for Rust (rustfmt) and C# (.NET style).
+[*.{rs,cs}]
+indent_size = 4
+
 # License texts are copied verbatim from their official sources.
 [{LICENSE,LICENSES/**}]
 trim_trailing_whitespace = false

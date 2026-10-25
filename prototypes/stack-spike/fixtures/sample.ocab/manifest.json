@@ -1,0 +1,5 @@
+{
+  "formatVersion": "0.1",
+  "generator": "hand-written fixture",
+  "entries": ["project.json"]
+}
