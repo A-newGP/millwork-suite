@@ -27,7 +27,12 @@ tree_memory_kb() {
     powershell -NoProfile -Command "
       \$all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, WorkingSetSize
       \$tree = @(\$all | Where-Object Name -eq '$name.exe' | ForEach-Object ProcessId)
-      if (\$tree.Count -eq 0) { Write-Error 'process $name.exe not found'; exit 1 }
+      if (\$tree.Count -eq 0) {
+        [Console]::Error.WriteLine('process $name.exe not found; candidates:')
+        \$all | Where-Object { \$_.Name -like 'oc-ui*' -or \$_.Name -like '*webview*' } |
+          ForEach-Object { [Console]::Error.WriteLine(\"  \$(\$_.Name) pid=\$(\$_.ProcessId) parent=\$(\$_.ParentProcessId)\") }
+        exit 1
+      }
       \$i = 0
       while (\$i -lt \$tree.Count) { \$tree += @(\$all | Where-Object ParentProcessId -eq \$tree[\$i] | ForEach-Object ProcessId); \$i++ }
       [int64]((\$all | Where-Object { \$tree -contains \$_.ProcessId } | Measure-Object WorkingSetSize -Sum).Sum / 1KB)" | tr -d '\r'
@@ -63,6 +68,9 @@ for run in $(seq "$runs"); do
   times+=( $(( $(now_ms) - start )) )
   if (( run == 1 )); then
     sleep 1
+    if ! kill -0 "$pid" 2>/dev/null; then
+      echo "::error::$label exited before memory could be sampled; its output:"; cat "$log"; exit 1
+    fi
     memory_kb=$(tree_memory_kb "$pid")
   fi
   wait "$pid" || true  # the application exits by itself after the marker
