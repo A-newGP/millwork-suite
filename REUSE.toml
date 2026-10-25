@@ -17,6 +17,7 @@ path = [
   "prototypes/stack-spike/fixtures/**",
   "prototypes/stack-spike/expected/**",
   "prototypes/stack-spike/rust/Cargo.lock",
+  "prototypes/stack-spike/csharp/global.json",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 OpenCabinet contributors"

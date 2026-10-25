@@ -86,7 +86,7 @@ public abstract record Insert;
 public sealed record DoorsInsert(
     int Count,
     string Style,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] HingeSide? HingeSide) : Insert;
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] HingeSide? HingeSide = null) : Insert;
 
 [JsonConverter(typeof(JsonStringEnumConverter<HingeSide>))]
 public enum HingeSide
@@ -107,5 +107,5 @@ internal sealed partial class SpikeJsonContext : JsonSerializerContext;
 
 internal sealed record Manifest(
     string FormatVersion,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Generator,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Entries);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Generator = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Entries = null);
