@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 OpenCabinet contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[package]
+name = "oc-export-plain"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Export spike: DXF R12 and CSV written by hand, with no dependencies"
+publish = false
+
+[dependencies]
+oc-export-core = { workspace = true }
