@@ -29,9 +29,9 @@ $Marker = 'OPENCABINET_FIRST_FRAME'
 # Budget on the reference computer, and the margin below which a change
 # against the base is treated as noise.
 $Measures = @(
-    @{ Key = 'start'; Name = 'Start to first frame'; Unit = 'ms'; Budget = 2000; Noise = 50; Gated = $true }
-    @{ Key = 'memory'; Name = 'Memory after start'; Unit = 'MB'; Budget = 150; Noise = 5; Gated = $IsWindows }
-    @{ Key = 'edit'; Name = 'Response to an edit'; Unit = 'ms'; Budget = 50; Noise = 1; Gated = $true }
+    @{ Key = 'start'; Name = 'Start to first frame'; Unit = 'ms'; Budget = 2000; Noise = 50; Gated = $true; Digits = 1 }
+    @{ Key = 'memory'; Name = 'Memory after start'; Unit = 'MB'; Budget = 150; Noise = 5; Gated = $IsWindows; Digits = 1 }
+    @{ Key = 'edit'; Name = 'Response to an edit'; Unit = 'ms'; Budget = 50; Noise = 1; Gated = $true; Digits = 3 }
 )
 
 function Measure-Start([string] $Exe) {
@@ -119,9 +119,10 @@ foreach ($measure in $Measures) {
     $result = if (-not $problems) { 'ok' }
               elseif ($measure.Gated) { $failed = $true; 'FAIL: ' + ($problems -join ', ') }
               else { 'not gated: ' + ($problems -join ', ') }
-    $baseText = if ($null -ne $base) { '{0:N1} {1}' -f $base, $unit } else { 'n/a' }
-    $lines += '| {0} | {1} {2} | {3:N1} {2} | {4} | {5} |' -f `
-        $measure.Name, $measure.Budget, $unit, $head, $baseText, $result
+    $number = "N$($measure.Digits)"
+    $baseText = if ($null -ne $base) { "{0:$number} $unit" -f $base } else { 'n/a' }
+    $lines += "| {0} | {1} $unit | {2:$number} $unit | {3} | {4} |" -f `
+        $measure.Name, $measure.Budget, $head, $baseText, $result
 }
 $lines += ''
 $lines += "Medians of $Runs runs ($(if ($IsWindows) { 'Windows' } else { 'Linux' }))."
