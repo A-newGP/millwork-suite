@@ -52,11 +52,13 @@ Agreed with the founder for the first usable release (phase 2):
 
 | In scope for 0.1 | Modeled now, implemented later | Out of scope (future RFCs) |
 | --- | --- | --- |
-| Frameless and face frame construction | Five-piece doors (as sub-assemblies) | User-defined formulas |
-| Base, wall and tall cabinets with doors, drawers, shelves and open sections | Moldings, countertops | Free-form 3D geometry |
-| Walls with openings; cabinets placed on walls; elevations | Estimating and labor | Collaboration and merging |
-| Cut list, bill of materials, edge banding | Cut optimization results | Drawing annotations and layouts |
-| Machining operations (holes, line boring, grooves) | CNC post-processing | Pricing catalogs from manufacturers |
+| Frameless and face frame construction | Moldings, countertops | User-defined formulas |
+| Base, wall and tall cabinets with doors, drawers, shelves and open sections | Estimating and labor | Free-form 3D geometry |
+| Blind corner cabinets | Cut optimization results | Diagonal and L-shaped corner cabinets (non-orthogonal parts) |
+| Slab and five-piece doors and drawer fronts | CNC post-processing | Collaboration and merging |
+| Walls with openings; cabinets placed on walls; elevations | | Drawing annotations and layouts |
+| Cut list, bill of materials, edge banding, hardware | | Pricing catalogs from manufacturers |
+| Machining operations (holes, line boring, grooves) | | |
 
 The breadth of this scope is intentional; the implementation should still
 deliver it in milestones (see [Drawbacks](#drawbacks)).
@@ -195,6 +197,10 @@ define fields for personal data (addresses, phone numbers) in v0.1.
 
   Fillers, scribes and end panels are products too, so they appear in the
   cut list and in elevations like any other.
+
+  Several placements may reference the same product: identical cabinets on
+  different walls share one definition, and changing it changes all of
+  them.
 - **Elevation:** a view of one wall and the products placed on it. In v0.1
   elevations are derived, one per wall; their drawing settings belong to the
   future shop drawings RFC.
@@ -210,18 +216,31 @@ A product is one cabinet (or filler, end panel…) as the user designed it.
 | `type` | Product type ID and version, e.g. `base-cabinet@1` |
 | `standard` | Construction standard ID (snapshot in the project library) |
 | `width`, `height`, `depth` | Overall dimensions, in nanometers |
+| `quantity` | Number of units for a product with no placements (default 1) |
 | `parameters` | Typed values the type declares (see below) |
 | `materials` | Map from material **role** to library item |
 | `front` | Front layout (see below) |
 | `overrides` | Changes to derived data (see §10) |
 | `extensions` | Namespaced plugin data |
 
-**Product types** (base, wall, tall, sink base, corner, filler, end panel…)
-are generators shipped by modules: they declare their parameters and turn a
-product into assemblies and parts according to the standard. Types are
-versioned; a project records the type version it was designed with, and a
-new major version never applies to an existing product without the user's
+**Quantity.** A product's count in the cut list and bill of materials is the
+number of its placements when it has any, and its `quantity` otherwise. The
+second form serves repeated or commercial orders that are not laid out on
+walls. A product with placements and a `quantity` other than 1 is a
+validation error, so the two forms can never disagree.
+
+**Product types** (base, wall, tall, sink base, blind corner, filler, end
+panel…) are generators shipped by modules: they declare their parameters and
+turn a product into assemblies and parts according to the standard. Types
+are versioned; a project records the type version it was designed with, and
+a new major version never applies to an existing product without the user's
 consent.
+
+A **blind corner** cabinet is an orthogonal box whose front is partly hidden
+behind the adjoining cabinet. Its type declares the `blindSide` (left or
+right) and the `blindWidth`; the hidden part of the front becomes a fixed
+panel or filler and the remaining front is an ordinary split tree. Diagonal
+and L-shaped corners need non-orthogonal parts and are left to a future RFC.
 
 **Parameters** are typed: `length`, `count`, `boolean`, `enum`, `material`,
 `hardware`. Each has a default from the standard or the type. v0.1 has no
@@ -237,7 +256,8 @@ defaults; the product overrides them.
 #### Front layout
 
 The front of a product is a **split tree**. The root is the product's front
-opening. Each node is either:
+opening. Every node has its own UUIDv7 `id`, which never changes when the
+tree is edited around it. Each node is either:
 
 - a **split** into children, `horizontal` (stacked top to bottom) or
   `vertical` (side by side), where each child's size is a fixed length or a
@@ -258,6 +278,26 @@ changes:
 The standard defines how each insert relates to its opening (overlay,
 inset, reveals, gaps), so a door's size is always derived, never typed in.
 
+**Door and drawer front styles.** Doors, drawer fronts and false fronts have
+a `style`:
+
+- `slab`: a single part;
+- `fivePiece`: a sub-assembly of two stiles, two rails and a panel. Frame
+  widths, joinery (cope-and-stick or mortise-and-tenon, which changes the
+  rails' cut length), panel type (flat or raised), panel thickness role and
+  groove depth come from the standard; the insert may override the frame
+  widths. Each frame member and the panel are parts of their own, so they
+  appear in the cut list with their grain running along their length.
+
+**Hardware placement.** The standard positions hardware automatically:
+number of hinges by door height and their distance from the ends, slide
+type and length by cabinet depth, pull location and orientation by insert.
+An insert may **adjust** that result, for example a third hinge, a hinge
+moved to clear a shelf, or a pull centered instead of at the top. An
+adjustment is part of the authored front layout, so it survives
+re-evaluation; the derived machining (hinge cups, slide holes, pull holes)
+follows the adjusted positions.
+
 ### 7. Construction standards
 
 A standard is a structured, versioned set of construction rules. It is data,
@@ -270,7 +310,8 @@ not code. v0.1 groups its rules as follows:
 | Back | Applied, rabbeted or grooved; thickness role; groove depth and setback |
 | Toe kick | Integral or separate base; height; recess |
 | Face frame | Stile and rail widths, overhang beyond case, scribe allowance, joinery |
-| Fronts | Overlay type (full, partial, inset), overlay amount, gaps and reveals |
+| Fronts | Overlay type (full, partial, inset), overlay amount, gaps and reveals; five-piece frame widths, joinery, panel type and groove depth |
+| Hardware | Hinge count by door height and end distances; slide type and length by depth; pull location by insert |
 | Drawers | Box construction, side thickness role, clearances per slide type, bottom capture |
 | Shelves | Fixed or adjustable, front setback, clearance |
 | System holes | Line boring: first hole, spacing (e.g. 32 mm), setback from front and back |
@@ -322,7 +363,10 @@ derive(product, standard, library, typeVersion, evaluatorVersion)
   and child parts.
 - **Part:**
   - `key`, a deterministic path that identifies the part across
-    re-evaluations, e.g. `case/side.left` or `front/0/1/drawer/front`;
+    re-evaluations, built from assembly roles and front node IDs, e.g.
+    `case/side.left` or `front/<node id>/drawer/front`. Because node IDs
+    are stable, restructuring the front elsewhere does not change the keys
+    of untouched parts;
   - `role` (left side, bottom, back, stretcher, door, drawer front,
     face frame stile…), used for material and edge band rules;
   - `material` and `grain` orientation;
@@ -420,10 +464,19 @@ Illustrative fragment (not normative):
   "depth": 609600000,
   "materials": { "case": "0192f3a4-0000-7000-8000-0000000000a1" },
   "front": {
+    "id": "0192f3a4-7c1e-7b2a-9f00-3d5e8a1b2c50",
     "split": "horizontal",
     "children": [
-      { "size": { "length": 152400000 }, "insert": { "kind": "drawer" } },
-      { "size": { "share": 1 }, "insert": { "kind": "doors", "count": 2 } }
+      {
+        "id": "0192f3a4-7c1e-7b2a-9f00-3d5e8a1b2c51",
+        "size": { "length": 152400000 },
+        "insert": { "kind": "drawer", "style": "slab" }
+      },
+      {
+        "id": "0192f3a4-7c1e-7b2a-9f00-3d5e8a1b2c52",
+        "size": { "share": 1 },
+        "insert": { "kind": "doors", "count": 2, "style": "fivePiece" }
+      }
     ]
   }
 }
@@ -438,8 +491,9 @@ Illustrative fragment (not normative):
   elevations), each tested against reference projects.
 - **Snapshots duplicate data** in every project. Library items are small; the
   safety of unchanged jobs is worth more than the bytes.
-- **Derived part keys can shift** when a front layout is restructured, which
-  orphans overrides on that product. Orphan reporting makes this visible
+- **Derived part keys disappear** when the user deletes the front node or
+  insert they belong to, which orphans overrides on those parts. Stable node
+  IDs limit this to genuine deletions, and orphan reporting makes it visible
   rather than silent; key stability gets tests of its own.
 - **No user formulas in 0.1.** Shops with unusual products depend on product
   types shipped by modules or plugins until a formula RFC lands.
@@ -467,19 +521,19 @@ in §13, and changes to this model require a new RFC.
 
 ## Unresolved questions
 
-To settle during the comment period:
+To settle before acceptance:
 
 1. **File extension and media type**, which depend on the project name.
-2. **Doors in 0.1:** slab doors only, or five-piece doors as sub-assemblies
-   from the start?
-3. **Part key scheme:** are path-like keys stable enough, or should split
-   tree nodes get their own UUIDs so keys survive restructuring?
-4. **Hardware placement:** are hinges, slides and pulls positioned by the
-   standard only, or can the user place them per product in 0.1?
-5. **Corner cabinets:** which corner types (blind, diagonal, lazy Susan)
-   must 0.1 support?
-6. **Quantities:** should a product carry a quantity (ten identical
-   cabinets), or must each instance be placed?
+
+Settled by the founder on 2026-10-25, while drafting:
+
+| Question | Decision | Section |
+| --- | --- | --- |
+| Door styles in 0.1 | Slab and five-piece, as sub-assemblies | §6 |
+| Part key scheme | Front nodes carry their own UUIDs; keys use them | §6, §9 |
+| Hardware placement | Positioned by the standard, adjustable per insert | §6, §7 |
+| Corner cabinets in 0.1 | Blind corners only | §6 |
+| Quantities | Placements count units; unplaced products carry a quantity | §6 |
 
 To settle during implementation:
 
