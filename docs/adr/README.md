@@ -27,3 +27,4 @@ Accepted ADRs are not edited; a new ADR supersedes them.
 | [0010](0010-project-and-module-names.md) | Project and module names | Accepted |
 | [0011](0011-core-technical-stack.md) | Rust for the core | Accepted |
 | [0012](0012-desktop-ui-toolkit.md) | Desktop user interface toolkit | Accepted |
+| [0013](0013-gpl-or-later.md) | Keep "or later" in the GPL and AGPL licenses | Accepted |

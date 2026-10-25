@@ -53,7 +53,8 @@ documentos de proceso (MAINTAINERS, CODEOWNERS, CHANGELOG con entradas, repo
 
 ## Decisiones ya tomadas (no cambiarlas sin preguntar)
 
-- Licencia del núcleo y módulos de escritorio: **GPL-3.0-or-later**.
+- Licencia del núcleo y módulos de escritorio: **GPL-3.0-or-later**
+  ("or later" confirmado en el ADR-0013).
 - Servicios de servidor (futuros): **AGPL-3.0-or-later**.
 - Documentación e íconos: **CC BY-SA 4.0**. Especificación del formato de
   archivo: **CC BY 4.0**. Plantillas de plugin: **MIT**.
@@ -89,8 +90,6 @@ documentos de proceso (MAINTAINERS, CODEOWNERS, CHANGELOG con entradas, repo
 
 ## Decisiones pendientes (no tomarlas por tu cuenta)
 
-- GPL-3.0-or-later vs GPL-3.0-only (provisoriamente "or later"; ver la
-  consecuencia de licencia del ADR-0012).
 - Representación interna de longitudes y precisión (ADR-0009, propuesto:
   nanómetros enteros).
 
