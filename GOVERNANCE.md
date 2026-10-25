@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 PROJECT_NAME contributors
+SPDX-FileCopyrightText: 2026 OpenCabinet contributors
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
@@ -12,7 +12,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 ## Current model: founder-maintainer
 
-PROJECT_NAME starts with a single maintainer, its founder, who decides
+OpenCabinet starts with a single maintainer, its founder, who decides
 following the public rules below. The model is honest about its size and is
 designed to be replaced by collective governance.
 

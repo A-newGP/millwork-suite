@@ -1,16 +1,16 @@
 <!--
-SPDX-FileCopyrightText: 2026 PROJECT_NAME contributors
+SPDX-FileCopyrightText: 2026 OpenCabinet contributors
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# PROJECT_NAME
+# OpenCabinet
 
 > [!WARNING]
 > **Pre-alpha.** There is no usable software yet. This repository currently
 > holds the project's foundations: licensing, contribution rules and design
 > decisions. Nothing here is ready for production work.
 
-PROJECT_NAME is a free, open source and modular suite for designing,
+OpenCabinet is a free, open source and modular suite for designing,
 documenting and manufacturing architectural millwork and cabinetry.
 
 ## Why another tool?
@@ -57,7 +57,7 @@ to report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## License
 
-PROJECT_NAME follows the [REUSE](https://reuse.software/) specification:
+OpenCabinet follows the [REUSE](https://reuse.software/) specification:
 every file declares its copyright and license, and the full license texts
 live in [`LICENSES/`](LICENSES/).
 
@@ -72,5 +72,5 @@ live in [`LICENSES/`](LICENSES/).
 
 The rationale is recorded in [ADR-0002](docs/adr/0002-license-per-component.md).
 
-The PROJECT_NAME name and logo are not covered by these licenses; see
+The OpenCabinet name and logo are not covered by these licenses; see
 [TRADEMARKS.md](TRADEMARKS.md).

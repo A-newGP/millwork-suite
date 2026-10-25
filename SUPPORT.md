@@ -1,11 +1,11 @@
 <!--
-SPDX-FileCopyrightText: 2026 PROJECT_NAME contributors
+SPDX-FileCopyrightText: 2026 OpenCabinet contributors
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
 # Getting help
 
-PROJECT_NAME is a volunteer project in pre-alpha; there is no software to
+OpenCabinet is a volunteer project in pre-alpha; there is no software to
 support yet. In the meantime:
 
 - **Questions, ideas and millwork know-how:** use
