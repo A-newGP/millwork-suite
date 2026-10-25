@@ -151,4 +151,4 @@ constructivos, holguras, convenciones). Esa categoría alimenta el RFC-0001.
 - Reemplazar `PROJECT_NAME` en todos los archivos.
 - Dominio propio y correos por función (`security@`, `conduct@`,
   `contact@`), con renovación automática y dos personas con acceso.
-- Reemplazar el correo de reportes en CODE_OF_CONDUCT.md por `conduct@`.
+- Reemplazar el correo de reportes en CODE_OF_CONDUCT.md (hoy tu Gmail) por `conduct@`.
