@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2026 PROJECT_NAME contributors
+# SPDX-License-Identifier: CC0-1.0
+
+# Language-specific entries are added together with the technical stack.
+
+# Secrets — never commit them.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Operating systems
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors and IDEs (shared recommendations may be committed explicitly)
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*~
+
+# Local tooling
+node_modules/
+.venv/
+*.log
+
+# Claude Code personal settings
+.claude/settings.local.json
