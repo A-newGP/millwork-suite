@@ -20,13 +20,17 @@ timeout_ms=60000
 tree_memory_kb() {
   local root=$1
   if [[ "${RUNNER_OS:-}" == Windows ]]; then
-    local winpid
-    winpid=$(cat "/proc/$root/winpid")
+    # Find the application by executable name (the shell's PID is not the
+    # Windows PID), then add every descendant, such as WebView2 processes.
+    local name
+    name=$(basename "$exe" .exe)
     powershell -NoProfile -Command "
-      \$all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, WorkingSetSize
-      \$tree = @($winpid); \$i = 0
+      \$all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, WorkingSetSize
+      \$tree = @(\$all | Where-Object Name -eq '$name.exe' | ForEach-Object ProcessId)
+      if (\$tree.Count -eq 0) { Write-Error 'process $name.exe not found'; exit 1 }
+      \$i = 0
       while (\$i -lt \$tree.Count) { \$tree += @(\$all | Where-Object ParentProcessId -eq \$tree[\$i] | ForEach-Object ProcessId); \$i++ }
-      [int]((\$all | Where-Object { \$tree -contains \$_.ProcessId } | Measure-Object WorkingSetSize -Sum).Sum / 1KB)"
+      [int64]((\$all | Where-Object { \$tree -contains \$_.ProcessId } | Measure-Object WorkingSetSize -Sum).Sum / 1KB)" | tr -d '\r'
   else
     ps -e -o pid=,ppid=,rss= | awk -v root="$root" '
       { parent[$1] = $2; rss[$1] = $3 }
