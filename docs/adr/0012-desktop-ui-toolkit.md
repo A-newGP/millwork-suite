@@ -47,7 +47,9 @@ whole browser and contradicts the modest hardware principle.
 ## Evidence: the UI spike
 
 Each option implemented the same screen in
-[`prototypes/ui-spike/`](../../prototypes/ui-spike/) on the same Rust core:
+[`prototypes/ui-spike/`](https://github.com/OpenCabinet/opencabinet/tree/831d1eaf81c77c5bc8fb0a4a4ec1cce390daabc1/prototypes/ui-spike)
+(removed after this decision; the link points to the commit that added it)
+on the same Rust core:
 width, height and depth typed in shop notation (`30-1/2`, `30 1/2"`), the
 number of doors, a scaled elevation with doors, hinge cups and dimensions,
 and a cut list that updates on every keystroke. Invalid input shows an error
@@ -177,8 +179,9 @@ model or the drawings.
 
 ## Sources
 
-- UI spike and CI workflow: `prototypes/ui-spike/` and
-  `.github/workflows/ui-spike.yml`, run 40217151798.
+- UI spike and CI workflow, as of commit `831d1ea`:
+  `prototypes/ui-spike/` and `.github/workflows/ui-spike.yml`, run
+  40217151798.
 - Slint 1.18 documentation: language reference, testing backend, licensing
   (<https://slint.dev/terms-and-conditions>).
 - egui and eframe 0.37 documentation; egui_kittest 0.37.
