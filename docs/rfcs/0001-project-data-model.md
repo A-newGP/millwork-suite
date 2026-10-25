@@ -144,6 +144,10 @@ These rules hold for every implementation and every module:
 In v0.1 every part is axis-aligned in product coordinates; the only rotation
 is a product's rotation about Z when placed in plan.
 
+**Angles** are integers too: microdegrees, counterclockwise seen from above,
+so 90° is `90000000`. Every angle a shop uses (90°, 45°, 22.5°, 15°) is
+exact, and rotations are as deterministic as lengths (ADR-0009).
+
 ### 3. Entity overview
 
 ```text
@@ -158,6 +162,7 @@ Project
 │   ├── material assignments by role
 │   ├── front layout (split tree of openings with inserts)
 │   └── overrides
+├── drawings (reserved for the shop drawings RFC)
 └── revisions (log)
 
 Derived (never authored):
@@ -178,6 +183,10 @@ product ─► assemblies ─► parts ─► operations, edge banding
 | `revisions` | Ordered log: label (e.g. "A"), date, author, description |
 | `extensions` | Namespaced plugin data (see §11) |
 
+The project revision log is all v0.1 needs. Issuing shop drawings needs a
+revision per sheet and a record of each issue (what was sent, when, to whom
+and why); the shop drawings RFC adds both without changing this log.
+
 Client details are kept to a name and free-text notes; the model does not
 define fields for personal data (addresses, phone numbers) in v0.1.
 
@@ -193,7 +202,7 @@ define fields for personal data (addresses, phone numbers) in v0.1.
     left side, `elevation` of the product's bottom above the floor; the
     product's back plane lies on the wall's front face;
   - **free:** `position` (x, y, z) of the product origin and `rotation`
-    about Z, for islands and peninsulas.
+    about Z in [0°, 360°), for islands and peninsulas.
 
   Fillers, scribes and end panels are products too, so they appear in the
   cut list and in elevations like any other.
@@ -247,6 +256,12 @@ and L-shaped corners need non-orthogonal parts and are left to a future RFC.
 user-defined formulas: a product's behavior comes from its type and its
 standard, which keeps evaluation safe and deterministic. A formula language
 can be proposed in a future RFC.
+
+The file stores each parameter as a plain JSON value under its name; the
+**product type's declaration gives its type**, because a `length` and a
+`count` are both JSON integers. Validation checks every value against the
+declaration. A parameter the declaration does not know (from a newer type
+version, for example) is kept and reported as a warning.
 
 **Material roles** decouple "what part" from "what material": `case`,
 `back`, `shelves`, `doors`, `drawerFronts`, `drawerBox`, `drawerBottom`,
@@ -377,6 +392,13 @@ derive(product, standard, library, typeVersion, evaluatorVersion)
   - its **transform** in product coordinates (for elevations, 3D and
     collision checks);
   - **operations**.
+- **Anchors:** every face, edge and operation of a part has a stable key
+  derived from the part key, for example `case/side.left#face.A`,
+  `#edge.y1` or `#hole/<id>`. Drawing annotations and overrides attach to
+  anchors, so a dimension stays on the same feature when the model is
+  re-evaluated. An annotation whose anchor no longer exists is kept and
+  reported as orphaned, like an override (§10). The exact syntax belongs to
+  the format specification.
 - **Operation:** a machine-independent description in part coordinates,
   on a face (`A`, `B`) or an edge:
   - `hole`: position, diameter, depth;
@@ -450,11 +472,42 @@ The normative format comes in a separate specification. The intended shape:
 - lengths as JSON integers in nanometers;
 - an equivalent **unpacked directory** form with the same layout and the
   same `.ocab` suffix (for example `kitchen.ocab/`), so projects can be kept
-  in version control and diffed.
+  in version control and diffed;
+- a reserved top-level `drawings` collection, so the shop drawings RFC can
+  add sheets, views and templates in a minor version.
 
-A reader rejects a newer major `formatVersion`, reads newer minor versions
-preserving unknown fields, and migrates older versions forward with
-documented, tested migrations.
+**Versions.** A reader rejects a newer major `formatVersion`, reads newer
+minor versions preserving unknown fields, and migrates older versions
+forward with documented, tested migrations. When it saves a file read from
+a newer minor version, it **keeps that newer version number**; otherwise a
+newer reader would take the preserved fields for something an older writer
+produced.
+
+**Open and closed enumerations.** The specification marks each enumeration
+as open or closed. Open ones may gain values in a minor version: insert
+kinds, front styles, override actions, wall opening kinds, hardware
+categories and operation kinds. Closed ones change only in a major version:
+units, split direction, grain, construction method and sides. A reader
+keeps an unknown value of an open enumeration and reports the product that
+uses it as an error, so it is neither dropped nor misread, and reports are
+blocked for it (§12).
+
+**Strict writers, lenient readers.** Writers always put `mimetype` first and
+uncompressed and list every entry in the manifest. Readers accept a file
+that breaks those rules, as happens when an operating system tool re-zips a
+project, and warn. The manifest's entry list gives each attachment its media
+type; an entry missing from it is kept as `application/octet-stream`, with
+a warning.
+
+**Safe to open.** Readers reject entry names that could point outside the
+project (absolute paths, `..`, drive letters, backslashes), links in the
+directory form, and contents beyond published size limits.
+
+**The directory form under version control.** Saving over a directory
+rewrites the entries the software owns and removes the ones it listed
+before and no longer writes; it never deletes files the manifest does not
+list. JSON entries use LF line endings, and repositories should mark project
+directories as binary for Git (`*.ocab/** -text`) so no tool rewrites them.
 
 Illustrative fragment (not normative):
 
@@ -537,6 +590,23 @@ All questions raised while drafting were settled by the founder on
 | Corner cabinets in 0.1 | Blind corners only | §6 |
 | Quantities | Placements count units; unplaced products carry a quantity | §6 |
 | File extension and media type | `.ocab`, `application/vnd.opencabinet.project+zip` | §13 |
+
+Proposed during the comment period, after the format prototype
+([#10](https://github.com/OpenCabinet/opencabinet/pull/10)) and the review
+for shop drawings, and open for comment until the period ends:
+
+| Question | Proposal | Section |
+| --- | --- | --- |
+| How angles are stored | Integer microdegrees, counterclockwise | §2, §5 |
+| How parameter values are typed | By the product type's declaration | §6 |
+| How annotations stay attached | Stable anchor keys inside parts, with orphan reporting | §9 |
+| Where drawings will live | A reserved `drawings` collection | §3, §13 |
+| Revisions for issued drawings | Per sheet, added by the shop drawings RFC | §4 |
+| Saving a file from a newer minor version | Keep the newer version number | §13 |
+| Unknown enumeration values | Open and closed enumerations; keep unknown values, block the product | §13 |
+| Files re-zipped by other tools | Strict writers, lenient readers | §13 |
+| Hostile files | Safe entry names, no links, size limits | §13 |
+| Saving over the directory form | Owned and listed entries only; LF; binary for Git | §13 |
 
 To settle during implementation:
 

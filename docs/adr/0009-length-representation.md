@@ -62,8 +62,10 @@ nanometers.**
   (for example `f64` square meters for material yield), because squaring
   nanometers overflows 64 bits for large panels and those values do not
   need to be exact.
-- Angles are outside this ADR; RFC-0001 keeps v0.1 geometry axis-aligned
-  except for rotating a placed product in plan.
+- Angles follow the same idea: integer **microdegrees** (90° is
+  90,000,000), exact for every angle shops use and deterministic, as
+  RFC-0001 §2 describes. v0.1 needs them only to rotate a placed product in
+  plan.
 
 ### Consequences
 
