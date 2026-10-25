@@ -10,3 +10,14 @@ path = ".github/PULL_REQUEST_TEMPLATE.md"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 OpenCabinet contributors"
 SPDX-License-Identifier = "CC-BY-SA-4.0"
+
+# Test data and generated lock files of the throwaway stack spike.
+[[annotations]]
+path = [
+  "prototypes/stack-spike/fixtures/**",
+  "prototypes/stack-spike/expected/**",
+  "prototypes/stack-spike/rust/Cargo.lock",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 OpenCabinet contributors"
+SPDX-License-Identifier = "CC0-1.0"
