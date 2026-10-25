@@ -107,6 +107,9 @@ documentos de proceso (MAINTAINERS, CODEOWNERS, CHANGELOG con entradas, repo
 
 ## Cuentas de GitHub
 
+- Repositorio: <https://github.com/OpenCabinet/opencabinet>, en la
+  organización `OpenCabinet` (antes `A-newGP/millwork-suite`; GitHub
+  redirige los enlaces viejos). Usa `-R OpenCabinet/opencabinet` con `gh`.
 - El proyecto usa **solo la cuenta personal `A-newGP`**. Nunca usar la
   cuenta laboral `agonzales-metric` ni la organización de su empleador para
   nada de este proyecto (ni push, ni issues, ni forks).
