@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: 2026 PROJECT_NAME contributors
+# SPDX-License-Identifier: CC0-1.0
+
+# Keeps the pinned GitHub Actions up to date. Language ecosystems are added
+# together with the technical stack.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci

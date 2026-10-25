@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2026 PROJECT_NAME contributors
+# SPDX-License-Identifier: CC-BY-SA-4.0
+
+name: Documentation issue
+description: Report something missing, wrong or unclear in the documentation.
+title: "[Docs]: "
+labels: ["type: docs", "status: triage"]
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Location
+      description: File path or link to the affected page.
+      placeholder: docs/adr/0002-license-per-component.md
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong or missing?
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested improvement
+      description: Optional. If you know the fix, a pull request is even better.

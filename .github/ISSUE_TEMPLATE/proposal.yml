@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: 2026 PROJECT_NAME contributors
+# SPDX-License-Identifier: CC-BY-SA-4.0
+
+name: Proposal
+description: Suggest a feature, a workflow improvement or a design change.
+title: "[Proposal]: "
+labels: ["type: proposal", "status: triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! For open-ended questions, prefer
+        [Discussions](../discussions). Large changes (plugin API, file
+        format, new modules, governance) will need an RFC.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What do you need to do in the shop or office that is hard or impossible today?
+      placeholder: When I design a base cabinet with a face frame, I need to...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How would you like it to work? Describe the workflow, not another program's interface.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other ways to solve the problem, including how you work around it today.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Cabinet design
+        - Cut list and bill of materials
+        - Shop drawings
+        - Cut optimization
+        - CNC output
+        - File format and interoperability
+        - Plugins
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: clean-room
+    attributes:
+      label: Clean-room policy
+      options:
+        - label: This proposal contains no code, images, texts or files copied from proprietary software or from clients or employers.
+          required: true

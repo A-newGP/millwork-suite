@@ -1,0 +1,68 @@
+# SPDX-FileCopyrightText: 2026 PROJECT_NAME contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Checks that only make sense on pull requests: DCO sign-off on every
+# commit and a Conventional Commits title (it becomes the squash commit).
+# Event data is passed through environment variables, never interpolated
+# into scripts, to prevent script injection from untrusted titles.
+
+name: Pull request
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  dco:
+    name: DCO sign-off
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check Signed-off-by trailers
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          status=0
+          for sha in $(git rev-list --no-merges "$BASE_SHA..$HEAD_SHA"); do
+            author="$(git show -s --format='%an <%ae>' "$sha")"
+            # Bots such as Dependabot cannot certify the DCO.
+            if [[ "$author" == *"[bot]@users.noreply.github.com>" ]]; then
+              continue
+            fi
+            if ! git show -s --format='%(trailers:key=Signed-off-by,valueonly)' "$sha" \
+                | grep -qxF "$author"; then
+              echo "::error::Commit ${sha:0:12} lacks 'Signed-off-by: $author'."
+              status=1
+            fi
+          done
+          if [[ $status -ne 0 ]]; then
+            echo "Sign off with 'git commit -s'; see CONTRIBUTING.md to fix existing commits."
+          fi
+          exit $status
+
+  title:
+    name: Conventional Commits title
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check pull request title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(feat|fix|docs|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?!?: [^ ].*$'
+          if [[ ! "$TITLE" =~ $pattern ]]; then
+            echo "::error::The title must follow 'type(scope): description'; see CONTRIBUTING.md."
+            exit 1
+          fi
