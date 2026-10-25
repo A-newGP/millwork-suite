@@ -59,6 +59,7 @@ jobs:
       - name: Verify with independent readers
         if: runner.os == 'Linux'
         run: |
+          sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends qpdf poppler-utils
           python3 -m venv /tmp/verify
           /tmp/verify/bin/pip install --quiet --require-virtualenv -r ci/requirements.txt
