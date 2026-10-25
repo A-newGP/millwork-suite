@@ -8,8 +8,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 - **Status:** draft
 - **Author(s):** Andrés (@A-newGP)
 - **Created:** 2026-10-25
-- **Comment period ends:** to be set when the comment period opens
-- **Discussion:** pull request introducing this RFC
+- **Comment period ends:** 2026-11-08
+- **Discussion:** pull request introducing this RFC; announced in [Discussions #11](https://github.com/OpenCabinet/opencabinet/discussions/11)
 
 ## Summary
 
