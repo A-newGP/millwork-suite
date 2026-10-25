@@ -90,14 +90,17 @@ kitchen.ocab               a ZIP file, or a directory with the same entries
 
 ## Measurements
 
-From a local release build on Windows; CI repeats them on Linux and Windows.
-The sample kitchen is 13.9 KB of JSON and 2.4 KB as ZIP.
+From CI (GitHub-hosted runners, run 40226820700, release build). The
+sample kitchen is 13.9 KB of JSON and 2.4 KB as ZIP.
 
-| Products | ZIP | Unpacked | Save (median of 5) | Load (median of 5) |
-| --- | --- | --- | --- | --- |
-| 10 | 1 KB | 14 KB | 1.3 ms | 0.5 ms |
-| 100 | 5 KB | 131 KB | 1.6 ms | 0.7 ms |
-| 1000 | 37 KB | 1303 KB | 7.5 ms | 4.5 ms |
+| Products | ZIP | Unpacked | Linux save | Linux load | Windows save | Windows load |
+| --- | --- | --- | --- | --- | --- | --- |
+| 10 | 1 KB | 14 KB | 0.2 ms | 0.1 ms | 1.3 ms | 0.3 ms |
+| 100 | 5 KB | 131 KB | 0.9 ms | 0.5 ms | 1.6 ms | 1.3 ms |
+| 1,000 | 37 KB | 1,303 KB | 6.7 ms | 3.3 ms | 8.5 ms | 5.5 ms |
+| 10,000 | 345 KB | 13,036 KB | 63.1 ms | 34.2 ms | 75.4 ms | 51.2 ms |
 
-The synthetic projects repeat one cabinet, so they compress far better than
-real ones.
+Times are the median of five runs. The synthetic projects repeat one
+cabinet, so they compress far better than real ones. Even a project of ten
+thousand cabinets saves and loads in well under a tenth of a second, so the
+format needs no incremental or binary encoding.
