@@ -140,17 +140,21 @@ fn view_of(project: &Project) -> Result<View> {
 
 /// Measurement support shared by every front end: with `OC_MEASURE` set, a
 /// front end calls this once its first frame is on screen. It prints a marker
-/// the measurement script waits for, then exits after a pause long enough to
-/// sample memory.
+/// the measurement script waits for, then exits after `OC_MEASURE_HOLD_SECS`
+/// seconds (default 3), long enough to sample memory.
 pub fn first_frame_presented() {
     if std::env::var_os("OC_MEASURE").is_none() {
         return;
     }
+    let hold = std::env::var("OC_MEASURE_HOLD_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(3);
     let mut stdout = std::io::stdout();
     writeln!(stdout, "FIRST_FRAME").ok();
     stdout.flush().ok();
-    std::thread::spawn(|| {
-        std::thread::sleep(Duration::from_secs(3));
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(hold));
         std::process::exit(0);
     });
 }

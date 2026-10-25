@@ -49,7 +49,10 @@ memory_kb=""
 for run in $(seq "$runs"); do
   log=$(mktemp)
   start=$(now_ms)
-  OC_MEASURE=1 "$exe" > "$log" 2>&1 &
+  # The first run stays open longer so memory can be sampled; the others
+  # only time the launch.
+  hold=3; (( run == 1 )) && hold=20
+  OC_MEASURE=1 OC_MEASURE_HOLD_SECS=$hold "$exe" > "$log" 2>&1 &
   pid=$!
   until grep -q FIRST_FRAME "$log"; do
     if (( $(now_ms) - start > timeout_ms )); then
