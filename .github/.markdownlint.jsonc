@@ -1,0 +1,10 @@
+// SPDX-FileCopyrightText: 2026 PROJECT_NAME contributors
+// SPDX-License-Identifier: CC0-1.0
+
+// Overrides for .github/: templates are pasted into GitHub's own pages,
+// which already provide the top-level heading.
+{
+  "default": true,
+  "MD013": false,
+  "MD041": false
+}

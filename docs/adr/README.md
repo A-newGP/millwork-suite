@@ -1,0 +1,26 @@
+<!--
+SPDX-FileCopyrightText: 2026 PROJECT_NAME contributors
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
+# Architecture decision records
+
+An architecture decision record (ADR) captures one significant decision: its
+context, the options considered, the choice and its consequences. ADRs use
+the [MADR](https://adr.github.io/madr/) format (see
+[ADR-0001](0001-record-decisions-with-madr.md)).
+
+To propose a decision, copy [`template.md`](template.md) to
+`NNNN-short-title.md` with the next free number and open a pull request.
+Accepted ADRs are not edited; a new ADR supersedes them.
+
+| ADR | Title | Status |
+| --- | --- | --- |
+| [0001](0001-record-decisions-with-madr.md) | Record decisions with MADR | Accepted |
+| [0002](0002-license-per-component.md) | License per component | Accepted |
+| [0003](0003-reuse-compliance.md) | Declare licensing with the REUSE specification | Accepted |
+| [0004](0004-dco-instead-of-cla.md) | DCO instead of a CLA | Accepted |
+| [0005](0005-monorepo.md) | Single monorepo | Accepted |
+| [0006](0006-trunk-based-workflow.md) | Trunk-based workflow, Conventional Commits and SemVer | Accepted |
+| [0007](0007-english-as-repository-language.md) | English as the repository language | Accepted |
+| [0008](0008-imperial-default-units.md) | Imperial units by default, metric as an option | Accepted |
