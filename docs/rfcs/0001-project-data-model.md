@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 PROJECT_NAME contributors
+SPDX-FileCopyrightText: 2026 OpenCabinet contributors
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
@@ -14,7 +14,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 ## Summary
 
 This RFC defines the conceptual data model shared by every module of
-PROJECT_NAME: what a project contains, how a cabinet is described, how parts
+OpenCabinet: what a project contains, how a cabinet is described, how parts
 and machining are derived from that description, and the rules that keep
 the result exact, reproducible and open. It deliberately does not define the
 byte-level file format, which becomes a separate specification (CC-BY-4.0)
@@ -437,15 +437,20 @@ for products with errors.
 
 The normative format comes in a separate specification. The intended shape:
 
-- a ZIP container, with a first, uncompressed `mimetype` entry as in
-  OpenDocument and EPUB, so the file type is identifiable;
+- file extension **`.ocab`** (OpenCabinet project) and media type
+  **`application/vnd.opencabinet.project+zip`**, to be registered with IANA
+  in the vendor tree once the specification is published;
+- a ZIP container, with a first, uncompressed `mimetype` entry holding that
+  media type, as in OpenDocument and EPUB, so the file type is identifiable
+  without trusting the extension;
 - `manifest.json` with the `formatVersion` (major.minor), the generator and
   the list of entries;
 - JSON documents for the project, the library snapshots and the optional
   derived cache; attachments (images, PDFs) as separate entries;
 - lengths as JSON integers in nanometers;
-- an equivalent **unpacked directory** form, so projects can be kept in
-  version control and diffed.
+- an equivalent **unpacked directory** form with the same layout and the
+  same `.ocab` suffix (for example `kitchen.ocab/`), so projects can be kept
+  in version control and diffed.
 
 A reader rejects a newer major `formatVersion`, reads newer minor versions
 preserving unknown fields, and migrates older versions forward with
@@ -521,11 +526,8 @@ in §13, and changes to this model require a new RFC.
 
 ## Unresolved questions
 
-To settle before acceptance:
-
-1. **File extension and media type**, which depend on the project name.
-
-Settled by the founder on 2026-10-25, while drafting:
+All questions raised while drafting were settled by the founder on
+2026-10-25:
 
 | Question | Decision | Section |
 | --- | --- | --- |
@@ -534,6 +536,7 @@ Settled by the founder on 2026-10-25, while drafting:
 | Hardware placement | Positioned by the standard, adjustable per insert | §6, §7 |
 | Corner cabinets in 0.1 | Blind corners only | §6 |
 | Quantities | Placements count units; unplaced products carry a quantity | §6 |
+| File extension and media type | `.ocab`, `application/vnd.opencabinet.project+zip` | §13 |
 
 To settle during implementation:
 
