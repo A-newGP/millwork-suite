@@ -70,11 +70,13 @@ documentos de proceso (MAINTAINERS, CODEOWNERS, CHANGELOG con entradas, repo
   usuario. El modelo interno de precisión se decide en un ADR de la Fase 1b.
 - Núcleo en **Rust** (ADR-0011): `cargo fmt`, `cargo clippy -D warnings` y
   pruebas en la CI. Las longitudes son enteros de 64 bits en nanómetros.
+- Plugins de terceros: **aislados en un sandbox WebAssembly** (Wasmtime),
+  con permisos declarados y perfil determinista para los que participan en
+  el cálculo (RFC-0002). Los módulos oficiales son crates de Rust.
 
 ## Decisiones pendientes (no tomarlas por tu cuenta)
 
 - GPL-3.0-or-later vs GPL-3.0-only (provisoriamente "or later").
-- Plugins en el mismo proceso o aislados (RFC-0002).
 - Tecnología de la interfaz gráfica de escritorio.
 - Representación interna de longitudes y precisión (ADR-0009, propuesto:
   nanómetros enteros).
