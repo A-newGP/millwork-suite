@@ -1,0 +1,81 @@
+# SPDX-FileCopyrightText: 2026 OpenCabinet contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Builds, checks and measures the throwaway DXF, PDF and CSV exporters.
+# Removed together with prototypes/export-spike once phase 2 picks its
+# export libraries.
+
+name: Export spike
+
+on:
+  pull_request:
+    paths:
+      - prototypes/export-spike/**
+      - .github/workflows/export-spike.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+    working-directory: prototypes/export-spike
+
+jobs:
+  export:
+    name: Export spike (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install toolchain
+        run: rustup toolchain install stable --profile minimal --component clippy,rustfmt && rustup default stable
+      - name: Fetch dependencies
+        run: cargo fetch --locked
+      - name: Format and lint
+        run: cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --locked
+      - name: Release build
+        run: cargo build --locked --release
+      - name: Measure
+        run: ./ci/measure.sh | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Export
+        run: |
+          for name in plain dxf krilla printpdf; do
+            "target/release/oc-export-$name" out
+          done
+      - name: Verify with independent readers
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qpdf poppler-utils
+          python3 -m venv /tmp/verify
+          /tmp/verify/bin/pip install --quiet --require-virtualenv -r ci/requirements.txt
+          for pdf in out/*.pdf; do qpdf --check "$pdf"; done
+          /tmp/verify/bin/python -I ci/verify.py out | tee -a "$GITHUB_STEP_SUMMARY"
+          mkdir -p out/previews
+          for pdf in out/*.pdf; do
+            pdftoppm -png -r 72 "$pdf" "out/previews/$(basename "$pdf" .pdf)"
+          done
+          for dxf in out/*.dxf; do
+            /tmp/verify/bin/python -I -m ezdxf draw -o "out/previews/$(basename "$dxf" .dxf).png" "$dxf"
+          done
+      - name: Upload files for review
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: exported-files
+          path: prototypes/export-spike/out/
+          retention-days: 30
