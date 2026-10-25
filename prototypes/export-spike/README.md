@@ -41,24 +41,28 @@ anyone can look at the results.
 
 ## Results
 
-From a local release build on Windows; CI repeats them on Linux and Windows.
+From CI (GitHub-hosted runners, run 40235929328, release builds). Lines of
+code count the exporter only, without blank lines and comments.
 
-| Exporter | Formats | Lines of code | Crates | Executable | Run (median of 5) |
-| --- | --- | --- | --- | --- | --- |
-| plain | DXF R12, CSV | 125 | 15 | 429 KB | 48 ms |
-| dxf | DXF 2018 | 81 | 46 | 1,373 KB | 52 ms |
-| krilla | PDF | 141 | 87 | 3,188 KB | 78 ms |
-| printpdf | PDF | 125 | 104 | 1,991 KB | 54 ms |
+| Exporter | Formats | Lines of code | Crates | Executable, Windows | Executable, Linux | Run, Windows | Run, Linux |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| plain | DXF R12, CSV | 136 | 15 | 428 KB | 544 KB | 45 ms | 5 ms |
+| dxf | DXF 2018 | 83 | 46 | 1,374 KB | 1,125 KB | 43 ms | 5 ms |
+| krilla | PDF | 154 | 87 | 3,189 KB | 3,171 KB | 85 ms | 11 ms |
+| printpdf | PDF | 129 | 104 | 1,991 KB | 1,898 KB | 46 ms | 6 ms |
 
-The 15 crates of `plain` are the core's (serde and JSON); run times are
-mostly process start-up.
+The 15 crates of `plain` are the core's (serde and JSON). Runs are the median
+of five and mostly process start-up; every exporter is fast enough.
 
-| File | Version | Units or fonts | Audit errors | Audit fixes | Size |
+| File | Version | Units or font | Audit errors | Audit fixes | Size |
 | --- | --- | --- | --- | --- | --- |
 | plain-elevations.dxf | R12 (AC1009) | none declared | 0 | 0 | 12.4 KB |
 | dxf-elevations.dxf | 2018 (AC1032) | millimeters | 0 | 7 | 38.0 KB |
-| krilla-shop.pdf | PDF 1.7 | Arial, subset embedded | | | 33.5 KB |
+| krilla-shop.pdf | PDF 1.7 | DejaVu Sans, subset embedded | | | 20.2 KB |
 | printpdf-shop.pdf | PDF 1.3 | Helvetica, built in | | | 7.5 KB |
+
+qpdf found no structural errors in either PDF, and pypdf found every label
+and cut length in both.
 
 Every dependency of every exporter is under a permissive license (MIT,
 Apache-2.0, BSD, Zlib, Unicode-3.0), all compatible with GPL-3.0-or-later.
