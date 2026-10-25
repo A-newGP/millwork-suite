@@ -5,7 +5,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # 0014 — Performance budgets for modest computers
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-10-25
 - **Deciders:** Andrés (@A-newGP)
 
@@ -40,7 +40,7 @@ on it, and how are they enforced?
 
 ## Decision outcome
 
-Proposed option: **budgets enforced in CI** (option 1), because it is the
+Chosen option: **budgets enforced in CI** (option 1), because it is the
 only one that catches a regression in the pull request that causes it.
 Option 2 states a promise nobody checks, and option 3 finds problems after
 shops have already given up.
