@@ -10,3 +10,16 @@ path = ".github/PULL_REQUEST_TEMPLATE.md"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 OpenCabinet contributors"
 SPDX-License-Identifier = "CC-BY-SA-4.0"
+
+# Data, configuration and generated files of the throwaway UI spike.
+[[annotations]]
+path = [
+  "prototypes/ui-spike/Cargo.lock",
+  "prototypes/ui-spike/core/assets/**",
+  "prototypes/ui-spike/tauri/tauri.conf.json",
+  "prototypes/ui-spike/tauri/capabilities/**",
+  "prototypes/ui-spike/tauri/icons/**",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 OpenCabinet contributors"
+SPDX-License-Identifier = "CC0-1.0"

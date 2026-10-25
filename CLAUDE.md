@@ -26,7 +26,7 @@ La Fase 1 del plan se divide en dos partes:
   CI de documentación y ADRs de las decisiones ya tomadas.
 - **1b — Diseño (actual):** RFC-0001 (modelo de proyecto), ADR-0009
   (longitudes), ADR-0011 (stack: Rust, aceptado), RFC-0002 (módulos y
-  plugins) y el ADR de la interfaz gráfica. Los RFCs pasan al menos 14 días
+  plugins) y ADR-0012 (interfaz: Slint, aceptado). Los RFCs pasan al menos 14 días
   en comentarios públicos antes de aceptarse.
 
 El único código permitido en la Fase 1b son **prototipos desechables** en
@@ -83,11 +83,14 @@ documentos de proceso (MAINTAINERS, CODEOWNERS, CHANGELOG con entradas, repo
 - Plugins de terceros: **aislados en un sandbox WebAssembly** (Wasmtime),
   con permisos declarados y perfil determinista para los que participan en
   el cálculo (RFC-0002). Los módulos oficiales son crates de Rust.
+- Interfaz gráfica de escritorio en **Slint** (ADR-0012), con egui como
+  alternativa. Slint es GPL-3.0-only: el programa distribuido queda en la
+  práctica bajo GPL-3.0.
 
 ## Decisiones pendientes (no tomarlas por tu cuenta)
 
-- GPL-3.0-or-later vs GPL-3.0-only (provisoriamente "or later").
-- Tecnología de la interfaz gráfica de escritorio.
+- GPL-3.0-or-later vs GPL-3.0-only (provisoriamente "or later"; ver la
+  consecuencia de licencia del ADR-0012).
 - Representación interna de longitudes y precisión (ADR-0009, propuesto:
   nanómetros enteros).
 
