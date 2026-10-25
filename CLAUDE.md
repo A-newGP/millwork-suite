@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 PROJECT_NAME contributors
+SPDX-FileCopyrightText: 2026 OpenCabinet contributors
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
@@ -52,6 +52,9 @@ documentos de proceso (MAINTAINERS, CODEOWNERS, CHANGELOG con entradas, repo
 - Cumplimiento de licencias con la especificación **REUSE**
   (<https://reuse.software>), verificado en la CI con `reuse lint`. Solo se
   añade a `LICENSES/` una licencia cuando algún archivo la usa.
+- Nombre del proyecto: **OpenCabinet**. Los módulos llevan nombres
+  descriptivos con el prefijo de la suite: "OpenCabinet Designer",
+  "OpenCabinet Shop Drawings" (ver ADR-0010).
 - Nombre y logo: reservados por política de marca (TRADEMARKS.md).
 - Contribuciones: **DCO** (`git commit -s`), sin CLA.
 - Estructura: **monorepo**. Las plantillas de GitHub viven en el `.github/`
@@ -68,8 +71,6 @@ documentos de proceso (MAINTAINERS, CODEOWNERS, CHANGELOG con entradas, repo
 
 ## Decisiones pendientes (no tomarlas por tu cuenta)
 
-- Nombre del proyecto (usa el marcador `PROJECT_NAME` hasta que Andrés lo
-  defina).
 - GPL-3.0-or-later vs GPL-3.0-only (provisoriamente "or later").
 - Plugins en el mismo proceso o aislados.
 - Lenguaje y stack técnico.

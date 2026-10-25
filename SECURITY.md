@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 PROJECT_NAME contributors
+SPDX-FileCopyrightText: 2026 OpenCabinet contributors
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 ## Supported versions
 
-PROJECT_NAME has not published any release yet. Once it does, this section
+OpenCabinet has not published any release yet. Once it does, this section
 will list which versions receive security fixes.
 
 ## Reporting a vulnerability

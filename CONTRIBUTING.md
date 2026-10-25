@@ -1,9 +1,9 @@
 <!--
-SPDX-FileCopyrightText: 2026 PROJECT_NAME contributors
+SPDX-FileCopyrightText: 2026 OpenCabinet contributors
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# Contributing to PROJECT_NAME
+# Contributing to OpenCabinet
 
 Thank you for your interest! The project is in its earliest phase, so the
 most valuable contributions right now are:
@@ -25,7 +25,7 @@ most valuable contributions right now are:
 
 ## Clean-room policy
 
-PROJECT_NAME is developed independently. **Never contribute code, icons,
+OpenCabinet is developed independently. **Never contribute code, icons,
 help texts, templates, libraries, documentation or sample files taken from
 proprietary software** (AutoCAD, Bluebeam, Microvellum, Cabinet Vision,
 Mozaik or any other), nor drawings belonging to clients or employers.
@@ -88,7 +88,7 @@ specification. Use the license of the component you are changing (see the
 <!-- REUSE-IgnoreStart -->
 ```html
 <!--
-SPDX-FileCopyrightText: 2026 PROJECT_NAME contributors
+SPDX-FileCopyrightText: 2026 OpenCabinet contributors
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 ```

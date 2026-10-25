@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 PROJECT_NAME contributors
+SPDX-FileCopyrightText: 2026 OpenCabinet contributors
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
@@ -146,9 +146,15 @@ gh label create "good first issue" --color 7057FF --description "Good for newcom
 *Q&A* y crea **Millwork know-how** (cómo trabajan los talleres: métodos
 constructivos, holguras, convenciones). Esa categoría alimenta el RFC-0001.
 
-## Pendientes que dependen del nombre del proyecto
+## Pendientes con el nombre OpenCabinet
 
-- Reemplazar `PROJECT_NAME` en todos los archivos.
+- Reservar cuanto antes la organización `opencabinet` en GitHub (estaba
+  libre el 2026-10-25) y transferirle el repositorio (paso 2).
+- Registrar `opencabinet.org` (estaba libre el 2026-10-25; el `.com` está
+  ocupado).
+- Consultar al abogado la búsqueda de marca (USPTO, SENAPI) y mencionarle el
+  proyecto pequeño `xiamingyang70/opencabinet`, creado en octubre de 2026,
+  del mismo rubro.
 - Dominio propio y correos por función (`security@`, `conduct@`,
   `contact@`), con renovación automática y dos personas con acceso.
 - Reemplazar el correo de reportes en CODE_OF_CONDUCT.md (hoy tu Gmail) por `conduct@`.
