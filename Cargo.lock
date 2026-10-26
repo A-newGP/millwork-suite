@@ -3336,6 +3336,7 @@ name = "opencabinet-app"
 version = "0.0.0"
 dependencies = [
  "i-slint-backend-testing",
+ "opencabinet-eval",
  "opencabinet-format",
  "opencabinet-model",
  "opencabinet-reports",

@@ -123,9 +123,11 @@
 //! and overrides, makes the product an error rather than giving parts that
 //! would be wrong.
 
+pub mod elevation;
 pub mod front;
 pub mod machining;
 pub mod rules;
+pub mod view;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -135,10 +137,12 @@ use opencabinet_model::{
     SheetMaterial, Side, SplitDirection,
 };
 
+pub use crate::elevation::{Dimension, Elevation, PlacedCabinet, elevation, placement_problems};
 use crate::front::{Divider, Dividers, Layout, Opening, Rect, lay_out};
 pub use crate::machining::{Face, Operation, Point};
 use crate::machining::{groove_along, hinge_positions, holes_between};
 use crate::rules::{Back, FaceFrame, Fronts, Overlay, Rules};
+pub use crate::view::{FrontKind, FrontShape, FrontView, front_view};
 
 /// The four edges of a part: `x0` and `x1` are the ends of its length,
 /// `y0` and `y1` the sides of its width.
