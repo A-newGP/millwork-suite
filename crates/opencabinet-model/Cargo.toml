@@ -13,10 +13,11 @@ publish.workspace = true
 
 [dependencies]
 serde = { workspace = true }
+serde_json = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-serde_json = { workspace = true }
+uuid = { workspace = true }
 
 [lints]
 workspace = true
