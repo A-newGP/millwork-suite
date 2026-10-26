@@ -10,7 +10,7 @@
 //!   entity.
 //! - Authored data: the [`Project`] with its rooms and products, and the
 //!   [`Library`] of snapshots it uses.
-//! - [`validate`]: the checks that need no evaluator.
+//! - [`validate()`]: the checks that need no evaluator.
 //!
 //! Every object keeps the fields this version does not know in `unknown`,
 //! and every open enumeration keeps values it does not know in `Other`, so
