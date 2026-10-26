@@ -16,6 +16,7 @@ repository = "https://github.com/OpenCabinet/opencabinet"
 publish = false
 
 [workspace.dependencies]
+opencabinet-eval = { path = "crates/opencabinet-eval" }
 opencabinet-format = { path = "crates/opencabinet-format" }
 opencabinet-model = { path = "crates/opencabinet-model" }
 serde = { version = "1.0.229", features = ["derive"] }
