@@ -65,6 +65,26 @@ pub fn create_with(dialogs: Rc<dyn Dialogs>) -> Result<AppWindow, slint::Platfor
     }
     let handle = Rc::clone(&app);
     window.on_units_chosen(move |metric| handle.choose_units(metric));
+    let handle = Rc::clone(&app);
+    window.on_cabinet_chosen(move |index| handle.choose_cabinet(index));
+    let handle = Rc::clone(&app);
+    window.on_add_cabinet(move || {
+        handle.change_cabinets(|d| {
+            d.add();
+            Ok(())
+        });
+    });
+    let handle = Rc::clone(&app);
+    window.on_duplicate_cabinet(move || {
+        handle.change_cabinets(|d| {
+            d.duplicate();
+            Ok(())
+        });
+    });
+    let handle = Rc::clone(&app);
+    window.on_delete_cabinet(move || handle.change_cabinets(Designer::delete));
+    let handle = Rc::clone(&app);
+    window.on_label_edited(move |text| handle.edit_label(&text));
     window.set_kinds(ModelRc::new(VecModel::from(
         CabinetKind::ALL
             .map(|k| slint::SharedString::from(k.name()))
@@ -153,6 +173,40 @@ impl App {
         self.designer.borrow_mut().set_units(units);
         clear_errors(&window);
         self.show(&window, true);
+    }
+
+    fn choose_cabinet(&self, index: i32) {
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
+        let chosen = usize::try_from(index).is_ok_and(|i| self.designer.borrow_mut().select(i));
+        if chosen {
+            clear_errors(&window);
+            self.show(&window, true);
+        }
+    }
+
+    /// Adds, copies or removes a cabinet with `change`, then shows the one
+    /// to edit, or says why it could not.
+    fn change_cabinets(&self, change: impl FnOnce(&mut Designer) -> Result<(), String>) {
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
+        let result = change(&mut self.designer.borrow_mut());
+        clear_errors(&window);
+        self.show(&window, true);
+        if let Err(message) = result {
+            self.status(&message);
+        }
+    }
+
+    fn edit_label(&self, text: &str) {
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
+        let result = self.designer.borrow_mut().set_label(text);
+        window.set_label_error(result.err().unwrap_or_default().into());
+        self.show(&window, false);
     }
 
     fn choose_kind(&self, index: i32) {
@@ -297,6 +351,7 @@ impl App {
     fn show(&self, window: &AppWindow, texts: bool) {
         let designer = self.designer.borrow();
         if texts {
+            window.set_label_text(designer.label().into());
             window.set_width_text(designer.text(Dimension::Width).into());
             window.set_height_text(designer.text(Dimension::Height).into());
             window.set_depth_text(designer.text(Dimension::Depth).into());
@@ -319,14 +374,14 @@ impl App {
             })
             .collect();
         window.set_cut_rows(ModelRc::new(VecModel::from(rows)));
-        window.set_cut_problems(
-            list.problems
-                .join(
-                    "
-",
-                )
-                .into(),
-        );
+        window.set_cut_problems(list.problems.join("\n").into());
+        let cabinets: Vec<StandardListViewItem> = designer
+            .cabinets()
+            .iter()
+            .map(|c| StandardListViewItem::from(c.as_str()))
+            .collect();
+        window.set_cabinets(ModelRc::new(VecModel::from(cabinets)));
+        window.set_cabinet_index(i32::try_from(designer.selected()).unwrap_or(0));
         window.set_window_title(designer.title().into());
         window.set_cabinet_label(designer.label().into());
         let kind = designer
@@ -367,4 +422,5 @@ fn clear_errors(window: &AppWindow) {
     for dimension in Dimension::ALL {
         set_error(window, dimension, String::new());
     }
+    window.set_label_error(slint::SharedString::new());
 }

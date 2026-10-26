@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2026 OpenCabinet contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { ComboBox, LineEdit, Palette, StandardTableView } from "std-widgets.slint";
+import {
+    Button, ComboBox, LineEdit, Palette, StandardListView, StandardTableView,
+} from "std-widgets.slint";
 
 // A length field: a label, the text as typed, and below it either the value
 // read back in the display precision or why it cannot be read.
@@ -37,7 +39,12 @@ export component AppWindow inherits Window {
     min-height: 600px;
 
     in property <bool> metric;
+    // The project's cabinets, and which one is being edited.
+    in property <[StandardListViewItem]> cabinets;
+    in-out property <int> cabinet-index;
     in property <string> cabinet-label: "Cabinet";
+    in-out property <string> label-text;
+    in property <string> label-error;
     // The kinds of cabinet offered, and which one is being edited.
     in property <[string]> kinds;
     in-out property <int> kind-index;
@@ -64,6 +71,11 @@ export component AppWindow inherits Window {
     callback height-edited(text: string);
     callback depth-edited(text: string);
     callback units-chosen(metric: bool);
+    callback cabinet-chosen(index: int);
+    callback add-cabinet();
+    callback duplicate-cabinet();
+    callback delete-cabinet();
+    callback label-edited(text: string);
     callback kind-chosen(index: int);
     callback style-chosen(five-piece: bool);
     callback new-project();
@@ -133,11 +145,46 @@ export component AppWindow inherits Window {
             vertical-stretch: 1;
 
             VerticalLayout {
+                width: 230px;
+                padding: 16px;
+                spacing: 8px;
+                Text { text: "Cabinets"; font-size: 18px; font-weight: 700; }
+                StandardListView {
+                    accessible-label: "Cabinets";
+                    vertical-stretch: 1;
+                    model: root.cabinets;
+                    current-item <=> root.cabinet-index;
+                    current-item-changed(index) => { root.cabinet-chosen(index); }
+                }
+                HorizontalLayout {
+                    spacing: 4px;
+                    Button { text: "Add"; clicked => { root.add-cabinet(); } }
+                    Button { text: "Duplicate"; clicked => { root.duplicate-cabinet(); } }
+                    Button { text: "Delete"; clicked => { root.delete-cabinet(); } }
+                }
+            }
+
+            VerticalLayout {
                 width: 260px;
                 padding: 16px;
                 spacing: 12px;
                 alignment: start;
                 Text { text: root.cabinet-label; font-size: 18px; font-weight: 700; }
+                VerticalLayout {
+                    spacing: 4px;
+                    Text { text: "Label"; }
+                    LineEdit {
+                        accessible-label: "Label";
+                        text <=> root.label-text;
+                        edited(text) => { root.label-edited(text); }
+                    }
+                    if root.label-error != "": Text {
+                        text: root.label-error;
+                        color: #c62828;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                }
                 Text { text: "Type"; }
                 ComboBox {
                     accessible-label: "Type";

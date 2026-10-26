@@ -181,6 +181,68 @@ fn the_window_edits_saves_and_reopens_a_project() {
     assert_eq!(window.get_height_text(), "30\"");
     assert_eq!(window.get_kind_index(), 1);
 
+    cabinet_list(&window);
+
     window.invoke_about();
     assert!(window.get_status().contains("GNU GPL"));
+}
+
+/// The list of the project's cabinets, from a project whose only cabinet
+/// is W1, 30-1/2" wide.
+fn cabinet_list(window: &AppWindow) {
+    // The project's cabinets are listed; adding one edits it, and the cut
+    // list covers both.
+    let cabinets = |window: &AppWindow| -> Vec<String> {
+        let model = window.get_cabinets();
+        (0..model.row_count())
+            .map(|i| model.row_data(i).unwrap().text.to_string())
+            .collect()
+    };
+    assert_eq!(cabinets(window), ["W1 · Wall · 30-1/2\""]);
+    window.invoke_add_cabinet();
+    assert_eq!(
+        cabinets(window),
+        ["W1 · Wall · 30-1/2\"", "B1 · Base · 30\""]
+    );
+    assert_eq!(window.get_cabinet_index(), 1);
+    assert_eq!(window.get_label_text(), "B1");
+    assert_eq!(window.get_width_text(), "30\"");
+    let rows = window.get_cut_rows();
+    let products: Vec<String> = (0..rows.row_count())
+        .map(|r| {
+            rows.row_data(r)
+                .unwrap()
+                .row_data(0)
+                .unwrap()
+                .text
+                .to_string()
+        })
+        .collect();
+    assert!(products.contains(&"W1".to_owned()) && products.contains(&"B1".to_owned()));
+
+    // A label another cabinet has is refused; a new one renames it.
+    field(window, "Label").set_accessible_value("W1");
+    assert_eq!(
+        window.get_label_error(),
+        "Another cabinet is already labeled W1"
+    );
+    field(window, "Label").set_accessible_value("B30");
+    assert_eq!(window.get_label_error(), "");
+    assert_eq!(window.get_cabinet_label(), "B30");
+
+    // Choosing a cabinet in the list edits it.
+    window.invoke_cabinet_chosen(0);
+    assert_eq!(window.get_cabinet_label(), "W1");
+    assert_eq!(window.get_width_text(), "30-1/2\"");
+
+    // Duplicating copies it; deleting removes it, but never the last one.
+    window.invoke_duplicate_cabinet();
+    assert_eq!(window.get_cabinet_label(), "W2");
+    // Deleting W2 edits the cabinet that takes its place, B30.
+    window.invoke_delete_cabinet();
+    assert_eq!(window.get_cabinet_label(), "B30");
+    window.invoke_delete_cabinet();
+    assert_eq!(cabinets(window), ["W1 · Wall · 30-1/2\""]);
+    window.invoke_delete_cabinet();
+    assert_eq!(window.get_status(), "A project keeps at least one cabinet");
 }
