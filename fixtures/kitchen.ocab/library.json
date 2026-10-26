@@ -76,9 +76,28 @@
         "case": {
           "stretcherWidth": 101600000
         },
+        "drawers": {
+          "bottomGrooveDepth": 6350000,
+          "rearClearance": 25400000,
+          "sideClearance": 12700000,
+          "slideLengths": [
+            304800000,
+            355600000,
+            406400000,
+            457200000,
+            508000000,
+            558800000
+          ],
+          "verticalClearance": 38100000
+        },
         "fronts": {
           "gap": 3175000,
           "overlay": "full"
+        },
+        "shelves": {
+          "backAllowance": 19050000,
+          "frontSetback": 6350000,
+          "sideClearance": 1587500
         },
         "systemHoles": {
           "firstHole": 37000000,

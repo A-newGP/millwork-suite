@@ -3,6 +3,15 @@
 
 //! The evaluator against the sample kitchen in `fixtures/`, with sizes
 //! worked out by hand from the formulas in the crate documentation.
+//!
+//! The sample's B30 is 30" × 34-1/2" × 24" with a 6" drawer over a pair of
+//! doors: case of 18 mm melamine, back, drawer box and bottom of 12 mm
+//! birch, fronts of 18 mm maple banded with 0.5 mm. Its standard: toe kick
+//! K = 4", stretchers S = 4", front gap G = 1/8", back groove 3/8"; drawer
+//! side clearance 1/2", vertical clearance 1-1/2", rear clearance 1",
+//! slides from 12" to 22" by 2", bottom groove 1/4"; shelves 1/16"
+//! narrower than the inside, set back 1/4" in front and 3/4" for the back.
+//! So Hb = 34-1/2" − 4" = 774.7 mm and the inside is W − 2T = 726 mm.
 
 use std::path::PathBuf;
 
@@ -17,20 +26,6 @@ fn read<T: DeserializeOwned>(path: &str) -> T {
     serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap()
 }
 
-/// `(key, length, width, thickness, cut length, cut width)` in nanometers,
-/// with the key's front node id shortened to its last three digits.
-fn row(part: &Part) -> (String, i64, i64, i64, i64, i64) {
-    let key = part.key.replace("0199f8a0-0000-7000-8000-000000000", "");
-    (
-        key,
-        part.length.nm(),
-        part.width.nm(),
-        part.thickness.nm(),
-        part.cut_length.nm(),
-        part.cut_width.nm(),
-    )
-}
-
 /// The sample kitchen, with the B30's five-piece doors, which are not
 /// evaluated yet, made slabs.
 fn kitchen_with_slab_doors() -> (Project, Library) {
@@ -40,104 +35,115 @@ fn kitchen_with_slab_doors() -> (Project, Library) {
     (project, read("library.json"))
 }
 
-#[test]
-fn the_base_cabinet_gives_the_parts_worked_out_by_hand() {
-    let (project, library) = kitchen_with_slab_doors();
-    let evaluation = evaluate(&project, &library);
-    let b30: Vec<&Part> = evaluation
+/// Millimeters with only the decimals they need.
+fn mm(nm: i64) -> String {
+    let text = format!("{}.{:06}", nm / 1_000_000, (nm % 1_000_000).abs());
+    text.trim_end_matches('0').trim_end_matches('.').to_owned()
+}
+
+/// `key: length × width × thickness, cut length × cut width`, in mm, with
+/// the front node ids shortened to their last three digits.
+fn line(part: &Part) -> String {
+    let key = part.key.replace("0199f8a0-0000-7000-8000-000000000", "");
+    format!(
+        "{key}: {} × {} × {}, cut {} × {}",
+        mm(part.length.nm()),
+        mm(part.width.nm()),
+        mm(part.thickness.nm()),
+        mm(part.cut_length.nm()),
+        mm(part.cut_width.nm()),
+    )
+}
+
+/// The B30's parts whose key starts with `prefix`.
+fn b30(project: &Project, library: &Library, prefix: &str) -> Vec<String> {
+    let id = project.products[0].id;
+    evaluate(project, library)
         .parts
         .iter()
-        .filter(|p| p.product == project.products[0].id)
-        .collect();
+        .filter(|p| p.product == id && line(p).starts_with(prefix))
+        .map(line)
+        .collect()
+}
 
-    // W = 30", H = 34-1/2", D = 24", T = 18 mm (melamine), back 12 mm,
-    // K = 4", S = 4", G = 1/8", groove 3/8", fronts banded with 0.5 mm.
-    // Hb = 34-1/2" − 4" = 774.7 mm; W − 2T = 726 mm.
-    let expected: [(&str, i64, i64, i64, i64, i64); 9] = [
-        (
-            "case/side.left",
-            774_700_000,
-            609_600_000,
-            18_000_000,
-            774_700_000,
-            609_600_000,
-        ),
-        (
-            "case/side.right",
-            774_700_000,
-            609_600_000,
-            18_000_000,
-            774_700_000,
-            609_600_000,
-        ),
-        (
-            "case/bottom",
-            726_000_000,
-            609_600_000,
-            18_000_000,
-            726_000_000,
-            609_600_000,
-        ),
-        (
-            "case/stretcher.front",
-            726_000_000,
-            101_600_000,
-            18_000_000,
-            726_000_000,
-            101_600_000,
-        ),
-        (
-            "case/stretcher.back",
-            726_000_000,
-            101_600_000,
-            18_000_000,
-            726_000_000,
-            101_600_000,
-        ),
-        // Hb − T + g by W − 2T + 2g.
-        (
-            "case/back",
-            766_225_000,
-            745_050_000,
-            12_000_000,
-            766_225_000,
-            745_050_000,
-        ),
-        // The 6" drawer opening less the gap, grain across: W − G by 6" − G.
-        (
-            "front/402/drawer/front",
-            758_825_000,
-            149_225_000,
-            18_000_000,
-            757_825_000,
-            148_225_000,
-        ),
-        // The doors share Hb − 6" = 622.3 mm, split in two halves of 381 mm.
-        (
-            "front/403/door.1",
-            619_125_000,
-            377_825_000,
-            18_000_000,
-            618_125_000,
-            376_825_000,
-        ),
-        (
-            "front/403/door.2",
-            619_125_000,
-            377_825_000,
-            18_000_000,
-            618_125_000,
-            376_825_000,
-        ),
-    ];
-    let found: Vec<_> = b30.iter().map(|p| row(p)).collect();
-    let expected: Vec<_> = expected
-        .iter()
-        .map(|(k, a, b, c, d, e)| ((*k).to_owned(), *a, *b, *c, *d, *e))
-        .collect();
-    assert_eq!(found, expected);
+#[test]
+fn the_case_matches_the_sizes_worked_out_by_hand() {
+    let (project, library) = kitchen_with_slab_doors();
+    assert_eq!(
+        b30(&project, &library, "case/"),
+        [
+            "case/side.left: 774.7 × 609.6 × 18, cut 774.7 × 609.6",
+            "case/side.right: 774.7 × 609.6 × 18, cut 774.7 × 609.6",
+            "case/bottom: 726 × 609.6 × 18, cut 726 × 609.6",
+            "case/stretcher.front: 726 × 101.6 × 18, cut 726 × 101.6",
+            "case/stretcher.back: 726 × 101.6 × 18, cut 726 × 101.6",
+            // Hb − T + g by W − 2T + 2g.
+            "case/back: 766.225 × 745.05 × 12, cut 766.225 × 745.05",
+        ]
+    );
+    let all = evaluate(&project, &library);
+    let id = project.products[0].id;
     // Placed twice in the kitchen.
-    assert!(b30.iter().all(|p| p.quantity == 2));
+    assert!(
+        all.parts
+            .iter()
+            .filter(|p| p.product == id)
+            .all(|p| p.quantity == 2)
+    );
+}
+
+#[test]
+fn the_fronts_match_the_sizes_worked_out_by_hand() {
+    let (project, library) = kitchen_with_slab_doors();
+    let fronts: Vec<String> = b30(&project, &library, "front/")
+        .into_iter()
+        .filter(|l| !l.contains("/box."))
+        .collect();
+    assert_eq!(
+        fronts,
+        [
+            // The 6" opening less the gap, grain across: W − G by 6" − G,
+            // cut 1 mm smaller for the bands.
+            "front/402/drawer/front: 758.825 × 149.225 × 18, cut 757.825 × 148.225",
+            // The doors share Hb − 6" = 622.3 mm, in two halves of 381 mm.
+            "front/403/door.1: 619.125 × 377.825 × 18, cut 618.125 × 376.825",
+            "front/403/door.2: 619.125 × 377.825 × 18, cut 618.125 × 376.825",
+        ]
+    );
+}
+
+#[test]
+fn the_drawer_box_matches_the_sizes_worked_out_by_hand() {
+    let (project, library) = kitchen_with_slab_doors();
+    assert_eq!(
+        b30(&project, &library, "front/402/drawer/box."),
+        [
+            // 24" − 1" leaves 23": the 22" slide, 558.8 mm, sets the depth.
+            // The 6" opening less 1-1/2" is 114.3 mm high.
+            "front/402/drawer/box.side.left: 558.8 × 114.3 × 12, cut 558.8 × 114.3",
+            "front/402/drawer/box.side.right: 558.8 × 114.3 × 12, cut 558.8 × 114.3",
+            // 726 − 2 × 12.7 = 700.6 mm wide outside, less two 12 mm sides.
+            "front/402/drawer/box.front: 676.6 × 114.3 × 12, cut 676.6 × 114.3",
+            "front/402/drawer/box.back: 676.6 × 114.3 × 12, cut 676.6 × 114.3",
+            // The inside plus two 1/4" grooves each way.
+            "front/402/drawer/box.bottom: 689.3 × 547.5 × 12, cut 689.3 × 547.5",
+        ]
+    );
+}
+
+#[test]
+fn shelves_span_the_inside_less_their_clearances() {
+    let (mut project, library) = kitchen_with_slab_doors();
+    let front = project.products[0].front.as_mut().unwrap();
+    front.children[1].insert.as_mut().unwrap().shelves = Some(2);
+    assert_eq!(
+        b30(&project, &library, "front/403/shelf"),
+        [
+            // 726 − 1/16" by 24" − 1/4" − 3/4".
+            "front/403/shelf.1: 724.4125 × 584.2 × 18, cut 724.4125 × 584.2",
+            "front/403/shelf.2: 724.4125 × 584.2 × 18, cut 724.4125 × 584.2",
+        ]
+    );
 }
 
 #[test]
@@ -168,14 +174,7 @@ fn what_cannot_be_evaluated_yet_is_reported_not_guessed() {
 }
 
 #[test]
-fn evaluation_is_deterministic() {
-    let project: Project = read("project.json");
-    let library: Library = read("library.json");
-    assert_eq!(evaluate(&project, &library), evaluate(&project, &library));
-}
-
-#[test]
-fn bare_edges_and_missing_drawer_boxes_are_noted() {
+fn bare_edges_are_noted() {
     let (project, library) = kitchen_with_slab_doors();
     let evaluation = evaluate(&project, &library);
     let notes: Vec<&str> = evaluation
@@ -186,9 +185,13 @@ fn bare_edges_and_missing_drawer_boxes_are_noted() {
         .collect();
     assert_eq!(
         notes,
-        [
-            "no edge band chosen for `edgeBandCase`; those edges are left bare",
-            "drawer boxes are not evaluated yet",
-        ]
+        ["no edge band chosen for `edgeBandCase`; those edges are left bare"]
     );
+}
+
+#[test]
+fn evaluation_is_deterministic() {
+    let project: Project = read("project.json");
+    let library: Library = read("library.json");
+    assert_eq!(evaluate(&project, &library), evaluate(&project, &library));
 }

@@ -299,8 +299,9 @@ fn inches(numerator: i64, denominator: i64) -> Length {
     Length::from_inch_fraction(numerator, denominator).expect("a valid fraction")
 }
 
-/// 3/4" plywood for the case and fronts, 1/4" plywood for the back, a
-/// 0.5 mm edge band and a frameless standard, in that order.
+/// 3/4" plywood for the case and fronts, 1/4" plywood for the back and
+/// drawer bottoms, 1/2" plywood for drawer boxes, a 0.5 mm edge band and a
+/// frameless standard, in that order.
 fn starter_library() -> Library {
     let sheet = |name: &str, nominal: Length, actual: Length| SheetMaterial {
         id: Id::new(),
@@ -313,16 +314,31 @@ fn starter_library() -> Library {
         grain: Grain::Length,
         unknown: BTreeMap::default(),
     };
+    // The drawer slides the shop stocks, 12" to 22" by 2".
+    let slides = [12, 14, 16, 18, 20, 22].map(Length::from_inches);
     let rules = serde_json::json!({
         "back": { "construction": "grooved", "grooveDepth": inches(3, 8) },
         "case": { "stretcherWidth": Length::from_inches(4) },
+        "drawers": {
+            "sideClearance": inches(1, 2),
+            "verticalClearance": inches(3, 2),
+            "rearClearance": Length::from_inches(1),
+            "slideLengths": slides,
+            "bottomGrooveDepth": inches(1, 4),
+        },
         "fronts": { "overlay": "full", "gap": inches(1, 8) },
+        "shelves": {
+            "sideClearance": inches(1, 16),
+            "frontSetback": inches(1, 4),
+            "backAllowance": inches(3, 4),
+        },
         "toeKick": { "height": Length::from_inches(4) },
     });
     Library {
         materials: vec![
             sheet("Plywood 3/4\"", inches(3, 4), Length::from_mm(18)),
             sheet("Plywood 1/4\"", inches(1, 4), Length::from_mm(6)),
+            sheet("Plywood 1/2\"", inches(1, 2), Length::from_mm(12)),
         ],
         edge_bands: vec![EdgeBand {
             id: Id::new(),
@@ -348,9 +364,10 @@ fn starter_library() -> Library {
 
 /// A 30" × 34-1/2" × 24" base cabinet from the starter library.
 fn base_cabinet(library: &Library) -> Product {
-    let (plywood, back, band) = (
+    let (plywood, thin, box_sides, band) = (
         library.materials[0].id,
         library.materials[1].id,
+        library.materials[2].id,
         library.edge_bands[0].id,
     );
     let leaf = |size, kind, count| FrontNode {
@@ -381,8 +398,10 @@ fn base_cabinet(library: &Library) -> Product {
         parameters: BTreeMap::default(),
         materials: [
             ("case", plywood),
-            ("back", back),
+            ("back", thin),
             ("doors", plywood),
+            ("drawerBox", box_sides),
+            ("drawerBottom", thin),
             ("edgeBandCase", band),
             ("edgeBandFronts", band),
         ]
@@ -441,10 +460,7 @@ mod tests {
     fn the_cut_list_follows_edits_and_units() {
         let mut designer = Designer::default();
         let list = designer.cut_list();
-        assert_eq!(
-            list.problems,
-            ["B1, note: drawer boxes are not evaluated yet"]
-        );
+        assert_eq!(list.problems, Vec::<String>::new());
         let names: Vec<&str> = list.rows.iter().map(|r| r.part.as_str()).collect();
         assert_eq!(
             names,
@@ -456,6 +472,11 @@ mod tests {
                 "Back stretcher",
                 "Back",
                 "Drawer front",
+                "Drawer box, left side",
+                "Drawer box, right side",
+                "Drawer box, front",
+                "Drawer box, back",
+                "Drawer box, bottom",
                 "Door 1",
                 "Door 2",
             ]
@@ -471,7 +492,7 @@ mod tests {
             (rows[2].length.as_str(), rows[2].cut_length.as_str()),
             ("878.4 mm", "878.4 mm")
         );
-        assert_eq!(rows[7].edges, "4 edges");
+        assert_eq!(rows[12].edges, "4 edges");
     }
 
     #[test]

@@ -141,6 +141,12 @@ fn part_name(part: &Part) -> String {
         ("door", door) => format!("Door {}", door.trim_start_matches("door.")),
         ("drawerFront", _) => "Drawer front".into(),
         ("falseFront", _) => "False front".into(),
+        ("drawerSide", "box.side.left") => "Drawer box, left side".into(),
+        ("drawerSide", "box.side.right") => "Drawer box, right side".into(),
+        ("drawerSubFront", _) => "Drawer box, front".into(),
+        ("drawerBack", _) => "Drawer box, back".into(),
+        ("drawerBottom", _) => "Drawer box, bottom".into(),
+        ("shelf", shelf) => format!("Shelf {}", shelf.trim_start_matches("shelf.")),
         (role, _) => role.into(),
     }
 }
