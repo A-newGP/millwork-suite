@@ -5,10 +5,13 @@
 //! evaluator reads, typed from the standard's JSON.
 //!
 //! This is the evaluator's first version of the schema, which the format
-//! specification will fix. Groups the evaluator does not use yet, such as
-//! `systemHoles`, are ignored here and kept in the file.
+//! specification will fix. Groups and rules the evaluator does not use yet
+//! are ignored here and kept in the file.
+//!
+//! Rules that only place machining are optional: without them the parts
+//! are still right, and the evaluator notes what it could not machine.
 
-use opencabinet_model::{Length, Standard};
+use opencabinet_model::{Id, Length, Standard};
 use serde::Deserialize;
 
 /// The rules a cabinet needs.
@@ -35,6 +38,57 @@ pub struct Rules {
     /// The face frame; needed only by face frame standards.
     #[serde(default)]
     pub face_frame: Option<FaceFrame>,
+    /// Line boring for shelf pins and hinge plates.
+    #[serde(default)]
+    pub system_holes: Option<SystemHoles>,
+    /// Where doors are bored for hinges.
+    #[serde(default)]
+    pub hinges: Option<Hinges>,
+}
+
+/// The 32 mm system: two columns of holes in each side, for shelf pins and
+/// hinge plates.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemHoles {
+    /// From the front edge of the case to the front column.
+    pub front_setback: Length,
+    /// From the front face of the back to the rear column.
+    pub rear_setback: Length,
+    /// Between holes in a column, measured from the top of the bottom.
+    pub spacing: Length,
+    /// The holes' diameter.
+    pub diameter: Length,
+    /// How deep they go.
+    pub depth: Length,
+    /// The space left without holes at the top and bottom of an opening
+    /// with shelves.
+    pub end_clearance: Length,
+}
+
+/// Where doors are bored for hinge cups.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Hinges {
+    /// The hinge, from the library's hardware, whose `cupDiameter` and
+    /// `cupDepth` size the cup.
+    pub hardware: Id,
+    /// From the hinge edge of the door to the edge of the cup.
+    pub boring_distance: Length,
+    /// From each end of the door to the center of the nearest cup.
+    pub end_distance: Length,
+    /// How many hinges a door takes, by its height, shortest first.
+    pub counts: Vec<HingeCount>,
+}
+
+/// A row of the hinge table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HingeCount {
+    /// Doors up to this height, included...
+    pub up_to: Length,
+    /// ...take this many hinges.
+    pub count: u32,
 }
 
 /// A face frame: two stiles the full height at the ends, rails between
@@ -107,6 +161,10 @@ pub struct Drawers {
     pub slide_lengths: Vec<Length>,
     /// How deep the bottom's groove is.
     pub bottom_groove_depth: Length,
+    /// From the bottom edge of the box's sides, front and back to the
+    /// bottom's groove.
+    #[serde(default)]
+    pub bottom_groove_setback: Option<Length>,
 }
 
 /// Adjustable shelves, which span the cabinet's inside width.
@@ -148,6 +206,9 @@ pub enum Back {
     Grooved {
         /// How deep the grooves are.
         groove_depth: Length,
+        /// From the rear edge of the case to the groove.
+        #[serde(default)]
+        setback: Option<Length>,
     },
     /// Fastened over the back edges of the box.
     Applied,

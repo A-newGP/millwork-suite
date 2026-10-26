@@ -22,5 +22,10 @@ Phase 2 started before the phase 1 gate, on 2026-10-25, with work that does
 not depend on the open points of the RFCs; the RFCs are still accepted only
 after their public comment period.
 
+Machining in 0.1 covers back and drawer-bottom grooves, 32 mm line boring
+for shelf pins and hinge plates, and hinge cups. Still to come: case joinery
+(dowels, confirmat screws), slide and pull holes, angled pocket holes for
+face frames, and five-piece profiles, which are cut with shaper tooling.
+
 AI features are cross-cutting and optional: they arrive where they add value
 and never become a requirement.

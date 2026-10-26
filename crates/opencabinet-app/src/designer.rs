@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use opencabinet_format::Document;
 use opencabinet_model::validate::{Issue, validate};
 use opencabinet_model::{
-    EdgeBand, FrontNode, FrontStyle, Grain, Id, Insert, InsertKind, Length, Library, Method,
-    Product, Project, Settings, SheetMaterial, Size, SplitDirection, Standard, Units,
+    EdgeBand, FrontNode, FrontStyle, Grain, Hardware, Id, Insert, InsertKind, Length, Library,
+    Method, Product, Project, Settings, SheetMaterial, Size, SplitDirection, Standard, Units,
 };
 use opencabinet_reports::{CutList, Fonts, Paper, Separator, cut_list, cut_list_pdf, to_csv};
 
@@ -386,8 +386,8 @@ fn inches(numerator: i64, denominator: i64) -> Length {
 }
 
 /// 3/4" plywood for the case and fronts, 1/4" plywood for the back and
-/// drawer bottoms, 1/2" plywood for drawer boxes, a 0.5 mm edge band and a
-/// frameless standard, in that order.
+/// drawer bottoms, 1/2" plywood for drawer boxes, a 0.5 mm edge band, a cup
+/// hinge and a frameless standard, in that order.
 fn starter_library() -> Library {
     let sheet = |name: &str, nominal: Length, actual: Length| SheetMaterial {
         id: Id::new(),
@@ -402,8 +402,24 @@ fn starter_library() -> Library {
     };
     // The drawer slides the shop stocks, 12" to 22" by 2".
     let slides = [12, 14, 16, 18, 20, 22].map(Length::from_inches);
+    let hinge = Hardware {
+        id: Id::new(),
+        version: 1,
+        category: "hinge".into(),
+        name: "Cup hinge 35 mm".into(),
+        dimensions: [
+            ("cupDiameter".to_owned(), Length::from_mm(35)),
+            ("cupDepth".to_owned(), Length::from_mm(13)),
+        ]
+        .into(),
+        unknown: BTreeMap::default(),
+    };
     let rules = serde_json::json!({
-        "back": { "construction": "grooved", "grooveDepth": inches(3, 8) },
+        "back": {
+            "construction": "grooved",
+            "grooveDepth": inches(3, 8),
+            "setback": inches(1, 4),
+        },
         "case": { "stretcherWidth": Length::from_inches(4) },
         "drawers": {
             "sideClearance": inches(1, 2),
@@ -411,6 +427,7 @@ fn starter_library() -> Library {
             "rearClearance": Length::from_inches(1),
             "slideLengths": slides,
             "bottomGrooveDepth": inches(1, 4),
+            "bottomGrooveSetback": inches(1, 2),
         },
         "fivePiece": {
             "stileWidth": inches(9, 4),
@@ -426,6 +443,24 @@ fn starter_library() -> Library {
             "backAllowance": inches(3, 4),
         },
         "toeKick": { "height": Length::from_inches(4) },
+        "systemHoles": {
+            "frontSetback": Length::from_mm(37),
+            "rearSetback": Length::from_mm(37),
+            "spacing": Length::from_mm(32),
+            "diameter": Length::from_mm(5),
+            "depth": Length::from_mm(12),
+            "endClearance": Length::from_inches(2),
+        },
+        "hinges": {
+            "hardware": hinge.id,
+            "boringDistance": Length::from_mm(4),
+            "endDistance": Length::from_inches(3),
+            "counts": [
+                { "upTo": Length::from_inches(40), "count": 2 },
+                { "upTo": Length::from_inches(60), "count": 3 },
+                { "upTo": Length::from_inches(80), "count": 4 },
+            ],
+        },
     });
     Library {
         materials: vec![
@@ -450,7 +485,7 @@ fn starter_library() -> Library {
             rules: serde_json::from_value(rules).expect("rules are a JSON object"),
             unknown: BTreeMap::default(),
         }],
-        hardware: Vec::new(),
+        hardware: vec![hinge],
         unknown: BTreeMap::default(),
     }
 }
