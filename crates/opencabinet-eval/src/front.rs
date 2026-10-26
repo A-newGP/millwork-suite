@@ -47,39 +47,120 @@ pub struct Opening<'p> {
     pub rect: Rect,
 }
 
-/// The openings of a front tree laid over `rect`, top to bottom and left to
-/// right.
-///
-/// Fixed sizes are taken first; the space left is divided among the
-/// shares in proportion, and the nanometers left over by that division go
-/// one each to the first shares, so the sizes always add up to the whole.
-///
-/// # Errors
-/// When the fixed sizes do not fit, or a node is neither a split with
-/// children nor an opening with an insert.
-pub fn openings(root: &FrontNode, rect: Rect) -> Result<Vec<Opening<'_>>, String> {
-    let mut out = Vec::new();
-    lay_out(root, rect, &mut out)?;
-    Ok(out)
+/// The widths of the face frame members between openings: a rail between
+/// openings one over the other, a mullion between openings side by side.
+/// Frameless fronts have none.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Dividers {
+    /// Between the children of a horizontal split.
+    pub rail: Length,
+    /// Between the children of a vertical split.
+    pub mullion: Length,
 }
 
-fn lay_out<'p>(node: &'p FrontNode, rect: Rect, out: &mut Vec<Opening<'p>>) -> Result<(), String> {
+/// A face frame member between two openings of a split.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Divider<'p> {
+    /// The split it divides, whose identity makes part keys stable.
+    pub split: &'p FrontNode,
+    /// Which divider of the split, from 1, top down or left to right.
+    pub index: usize,
+    /// A rail for a horizontal split, a mullion for a vertical one.
+    pub direction: SplitDirection,
+    /// Where it is.
+    pub rect: Rect,
+}
+
+/// A front tree laid out: its openings and the members between them.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Layout<'p> {
+    /// Top to bottom and left to right.
+    pub openings: Vec<Opening<'p>>,
+    /// In the order the tree reaches them.
+    pub dividers: Vec<Divider<'p>>,
+}
+
+/// The openings of a front tree laid over `rect`, top to bottom and left to
+/// right, with nothing between them.
+///
+/// # Errors
+/// As for [`lay_out`].
+pub fn openings(root: &FrontNode, rect: Rect) -> Result<Vec<Opening<'_>>, String> {
+    Ok(lay_out(root, rect, Dividers::default())?.openings)
+}
+
+/// A front tree laid over `rect`, with `dividers` between the children of
+/// each split.
+///
+/// The dividers are taken first; then fixed sizes, which are the sizes of
+/// the openings; the space left is divided among the shares in proportion,
+/// and the nanometers left over by that division go one each to the first
+/// shares, so the sizes always add up to the whole.
+///
+/// # Errors
+/// When the dividers or the fixed sizes do not fit, or a node is neither a
+/// split with children nor an opening with an insert.
+pub fn lay_out(root: &FrontNode, rect: Rect, dividers: Dividers) -> Result<Layout<'_>, String> {
+    let mut layout = Layout::default();
+    lay_out_node(root, rect, dividers, &mut layout)?;
+    Ok(layout)
+}
+
+fn lay_out_node<'p>(
+    node: &'p FrontNode,
+    rect: Rect,
+    dividers: Dividers,
+    out: &mut Layout<'p>,
+) -> Result<(), String> {
     match (&node.split, &node.insert) {
         (None, Some(insert)) if node.children.is_empty() => {
-            out.push(Opening { node, insert, rect });
+            out.openings.push(Opening { node, insert, rect });
             Ok(())
         }
         (Some(direction), None) if !node.children.is_empty() => {
-            let total = match direction {
-                SplitDirection::Horizontal => rect.height,
-                SplitDirection::Vertical => rect.width,
+            let (total, divider) = match direction {
+                SplitDirection::Horizontal => (rect.height, dividers.rail),
+                SplitDirection::Vertical => (rect.width, dividers.mullion),
             };
-            let sizes = divide(&node.children, total)?;
+            let count = i64::try_from(node.children.len()).expect("a reasonable tree");
+            let room = total - divider * (count - 1);
+            if room < Length::ZERO {
+                return Err("the front's rails and mullions are wider than the opening".into());
+            }
+            let sizes = divide(&node.children, room)?;
             // Horizontal splits run from the top down; vertical ones from
             // the left.
             let mut top = rect.y + rect.height;
             let mut left = rect.x;
-            for (child, size) in node.children.iter().zip(sizes) {
+            for (i, (child, size)) in node.children.iter().zip(sizes).enumerate() {
+                if i > 0 {
+                    let divider_rect = match direction {
+                        SplitDirection::Horizontal => {
+                            top -= divider;
+                            Rect {
+                                y: top,
+                                height: divider,
+                                ..rect
+                            }
+                        }
+                        SplitDirection::Vertical => {
+                            left += divider;
+                            Rect {
+                                x: left - divider,
+                                width: divider,
+                                ..rect
+                            }
+                        }
+                    };
+                    if divider > Length::ZERO {
+                        out.dividers.push(Divider {
+                            split: node,
+                            index: i,
+                            direction: *direction,
+                            rect: divider_rect,
+                        });
+                    }
+                }
                 let child_rect = match direction {
                     SplitDirection::Horizontal => {
                         top -= size;
@@ -99,7 +180,7 @@ fn lay_out<'p>(node: &'p FrontNode, rect: Rect, out: &mut Vec<Opening<'p>>) -> R
                         r
                     }
                 };
-                lay_out(child, child_rect, out)?;
+                lay_out_node(child, child_rect, dividers, out)?;
             }
             Ok(())
         }
@@ -256,6 +337,40 @@ mod tests {
             vec![leaf(Size::Length(Length::from_nm(20)))],
         );
         assert!(openings(&too_small, rect(10, 100)).is_err());
+    }
+
+    #[test]
+    fn dividers_come_out_of_the_opening_before_the_sizes() {
+        // 3 openings side by side over 320 with 10 mullions: 300 to share,
+        // one fixed at 60 and the rest in halves.
+        let tree = split(
+            SplitDirection::Vertical,
+            vec![
+                leaf(Size::Length(Length::from_nm(60))),
+                leaf(Size::Share(1)),
+                leaf(Size::Share(1)),
+            ],
+        );
+        let dividers = Dividers {
+            rail: Length::from_nm(7),
+            mullion: Length::from_nm(10),
+        };
+        let layout = lay_out(&tree, rect(320, 50), dividers).unwrap();
+        let spans = |rects: Vec<Rect>| -> Vec<(i64, i64)> {
+            rects.iter().map(|r| (r.x.nm(), r.width.nm())).collect()
+        };
+        assert_eq!(
+            spans(layout.openings.iter().map(|o| o.rect).collect()),
+            [(0, 60), (70, 120), (200, 120)]
+        );
+        assert_eq!(
+            spans(layout.dividers.iter().map(|d| d.rect).collect()),
+            [(60, 10), (190, 10)]
+        );
+        let indexes: Vec<usize> = layout.dividers.iter().map(|d| d.index).collect();
+        assert_eq!(indexes, [1, 2]);
+        // Too many mullions for the width.
+        assert!(lay_out(&tree, rect(15, 50), dividers).is_err());
     }
 
     #[test]

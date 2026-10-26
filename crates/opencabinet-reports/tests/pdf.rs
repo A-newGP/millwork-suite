@@ -75,3 +75,25 @@ fn a_long_list_continues_on_more_pages() {
 fn not_a_font_is_an_error() {
     assert!(Fonts::new(b"not a font".to_vec(), b"no".to_vec()).is_err());
 }
+
+#[test]
+fn face_frame_members_are_named_for_people() {
+    let list = kitchen_list();
+    let names: Vec<(&str, &str)> = list
+        .rows
+        .iter()
+        .filter(|r| r.product == "W30" && r.part.starts_with("Face frame"))
+        .map(|r| (r.part.as_str(), r.material.as_str()))
+        .collect();
+    let maple = "Hard maple 3/4\" S4S";
+    assert_eq!(
+        names,
+        [
+            ("Face frame, left stile", maple),
+            ("Face frame, right stile", maple),
+            ("Face frame, top rail", maple),
+            ("Face frame, bottom rail", maple),
+            ("Face frame, mullion 1", maple),
+        ]
+    );
+}

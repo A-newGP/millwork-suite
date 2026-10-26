@@ -11,7 +11,7 @@
 use opencabinet_model::{Length, Standard};
 use serde::Deserialize;
 
-/// The rules a frameless cabinet needs.
+/// The rules a cabinet needs.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Rules {
@@ -32,6 +32,45 @@ pub struct Rules {
     /// Five-piece doors and fronts; needed only by fronts in that style.
     #[serde(default)]
     pub five_piece: Option<FivePiece>,
+    /// The face frame; needed only by face frame standards.
+    #[serde(default)]
+    pub face_frame: Option<FaceFrame>,
+}
+
+/// A face frame: two stiles the full height at the ends, rails between
+/// them at the top and the bottom, and a rail or a mullion for each
+/// division of the front.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FaceFrame {
+    /// The width of the stiles, the vertical members at the ends.
+    pub stile_width: Length,
+    /// The width of the rails, the horizontal members.
+    pub rail_width: Length,
+    /// The width of the top rail, when it is not `rail_width`.
+    #[serde(default)]
+    pub top_rail_width: Option<Length>,
+    /// The width of the bottom rail, when it is not `rail_width`.
+    #[serde(default)]
+    pub bottom_rail_width: Option<Length>,
+    /// The width of the mullions, the vertical members between openings,
+    /// when it is not `stile_width`.
+    #[serde(default)]
+    pub mullion_width: Option<Length>,
+    /// How far the frame stands out past each side of the case.
+    #[serde(default)]
+    pub overhang: Length,
+    /// How the members are joined.
+    pub joinery: Joinery,
+}
+
+/// How the members of a face frame are joined.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Joinery {
+    /// Butted and held with pocket screws: rails and mullions end at the
+    /// members they meet.
+    Butt,
 }
 
 /// Five-piece doors and fronts: two stiles, two rails and a floating panel.
@@ -114,13 +153,19 @@ pub enum Back {
     Applied,
 }
 
-/// How doors and drawer fronts sit on the box.
+/// How doors and drawer fronts sit on the box or the face frame.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Fronts {
-    /// Only full overlay is evaluated so far.
+    /// Full overlay for frameless cabinets; partial overlay or inset for
+    /// face frame ones.
     pub overlay: Overlay,
-    /// Between neighboring fronts; half of it around the outside.
+    /// How far a partial overlay front covers the frame on each edge.
+    #[serde(default)]
+    pub overlay_amount: Option<Length>,
+    /// Frameless: between neighboring fronts, half of it around the
+    /// outside. Face frame: between the doors of a pair, and around an
+    /// inset front.
     pub gap: Length,
 }
 
@@ -130,7 +175,7 @@ pub struct Fronts {
 pub enum Overlay {
     /// Fronts cover the whole box face.
     Full,
-    /// Fronts cover part of the box edges.
+    /// Fronts cover part of the face frame around their opening.
     Partial,
     /// Fronts sit inside the opening.
     Inset,
