@@ -65,6 +65,7 @@ export component AppWindow inherits Window {
     callback save-project-as();
     // `true` for semicolons between fields, as Excel in Spanish expects.
     callback export-cut-list(semicolon: bool);
+    callback export-cut-list-pdf();
     callback about();
     callback quit();
 
@@ -78,6 +79,10 @@ export component AppWindow inherits Window {
             MenuSeparator { }
             Menu {
                 title: "Export cut list";
+                MenuItem {
+                    title: "PDF…";
+                    activated => { root.export-cut-list-pdf(); }
+                }
                 MenuItem {
                     title: "CSV with commas…";
                     activated => { root.export-cut-list(false); }

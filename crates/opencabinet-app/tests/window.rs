@@ -35,6 +35,7 @@ impl Dialogs for Answers {
         let extension = match kind {
             FileKind::Project => "ocab",
             FileKind::CutList => "csv",
+            FileKind::CutListPdf => "pdf",
         };
         self.path
             .borrow()
@@ -142,6 +143,15 @@ fn the_window_edits_saves_and_reopens_a_project() {
     assert_eq!(
         window.get_status(),
         "Exported the cut list to test-cabinet.csv"
+    );
+
+    // And as a PDF, with the bundled font.
+    window.invoke_export_cut_list_pdf();
+    let pdf = std::fs::read(path.with_extension("pdf")).unwrap();
+    assert!(pdf.starts_with(b"%PDF-"));
+    assert_eq!(
+        window.get_status(),
+        "Exported the cut list to test-cabinet.pdf"
     );
 
     window.invoke_about();

@@ -25,3 +25,10 @@ path = "fixtures/**"
 precedence = "closest"
 SPDX-FileCopyrightText = "2026 OpenCabinet contributors"
 SPDX-License-Identifier = "CC0-1.0"
+
+# The bundled font, unchanged from the Noto project (ADR-0015).
+[[annotations]]
+path = ["assets/fonts/noto-sans/*.ttf", "assets/fonts/noto-sans/OFL.txt"]
+precedence = "override"
+SPDX-FileCopyrightText = "2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)"
+SPDX-License-Identifier = "OFL-1.1"

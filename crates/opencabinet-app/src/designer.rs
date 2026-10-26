@@ -14,7 +14,7 @@ use opencabinet_model::{
     EdgeBand, FrontNode, FrontStyle, Grain, Id, Insert, InsertKind, Length, Library, Method,
     Product, Project, Settings, SheetMaterial, Size, SplitDirection, Standard, Units,
 };
-use opencabinet_reports::{CutList, Separator, cut_list, to_csv};
+use opencabinet_reports::{CutList, Fonts, Paper, Separator, cut_list, cut_list_pdf, to_csv};
 
 use crate::NAME_AND_VERSION;
 
@@ -219,6 +219,18 @@ impl Designer {
     pub fn export_cut_list(&self, path: &Path, separator: Separator) -> Result<(), String> {
         std::fs::write(path, to_csv(&self.cut_list(), separator))
             .map_err(|e| format!("Cannot export the cut list: {e}"))
+    }
+
+    /// Writes the cut list as a PDF to print, on the paper usual for the
+    /// project's units.
+    ///
+    /// # Errors
+    /// A message for the user when the PDF cannot be made or written.
+    pub fn export_cut_list_pdf(&self, path: &Path, fonts: &Fonts) -> Result<(), String> {
+        let title = &self.document.project.name;
+        let paper = Paper::for_units(self.units());
+        let pdf = cut_list_pdf(&self.cut_list(), title, NAME_AND_VERSION, paper, fonts)?;
+        std::fs::write(path, pdf).map_err(|e| format!("Cannot export the cut list: {e}"))
     }
 
     /// Width over height, for drawing the front in proportion.

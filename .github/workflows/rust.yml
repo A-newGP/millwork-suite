@@ -11,6 +11,7 @@ on:
     paths:
       - crates/**
       - fixtures/**
+      - assets/**
       - Cargo.toml
       - Cargo.lock
       - clippy.toml
@@ -69,6 +70,18 @@ jobs:
         run: cargo test --locked --workspace
       - name: Documentation
         run: cargo doc --locked --workspace --no-deps
+      # The cut list PDF, read back by independent open source readers.
+      - name: Check the PDF with independent readers
+        if: runner.os == 'Linux'
+        run: |
+          cargo run --locked -q -p opencabinet-reports --example cut_list_pdf -- cut-list.pdf
+          sudo apt-get install -y --no-install-recommends qpdf poppler-utils
+          qpdf --check cut-list.pdf
+          text=$(pdftotext cut-list.pdf -)
+          for expected in "Cut list" "Left side" "Door 2" "28-19/32" "4 edges"; do
+            grep -qF "$expected" <<< "$text" || { echo "missing: $expected"; exit 1; }
+          done
+          pdffonts cut-list.pdf
 
   dependencies:
     name: Dependencies (cargo-deny)
