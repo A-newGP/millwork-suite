@@ -9,10 +9,11 @@
 //!
 //! # What this version evaluates
 //!
-//! Frameless base, wall and tall cabinets (`base-cabinet@1`,
-//! `wall-cabinet@1`, `tall-cabinet@1`) with full-overlay slab or five-piece
-//! doors, drawer fronts and false fronts, drawer boxes and adjustable
-//! shelves. Notation:
+//! Frameless and face frame base, wall and tall cabinets (`base-cabinet@1`,
+//! `wall-cabinet@1`, `tall-cabinet@1`) with slab or five-piece doors,
+//! drawer fronts and false fronts, drawer boxes and adjustable shelves:
+//! full overlay when frameless, partial overlay or inset with a face frame.
+//! Notation:
 //! `W`, `H`, `D` the product's width, height and depth; `T` the actual
 //! thickness of the `case` material; `K` the toe kick height, none for a
 //! wall cabinet; `S` the stretcher width; `G` the front gap; `g` the back
@@ -61,10 +62,32 @@
 //! the side clearance, by `D` less the front setback and the back
 //! allowance, banded in front like the case.
 //!
+//! A **face frame** (the standard's `faceFrame` rules, the `faceFrame`
+//! material, `F` its thickness) covers the box face, `W` × `Hb`, with
+//! butt joints: two stiles `s` wide the full height, top and bottom rails
+//! `rt` and `rb` wide between them, and for each split of the front a rail
+//! (`r` wide) or a mullion (`m` wide) between its openings, as long as the
+//! opening it divides. The frame is part of the depth and stands out past
+//! each side of the case by the overhang `o`, so the case is `W − 2o` wide
+//! and `D − F` deep, and its front edges are not banded. The top of the
+//! bottom is flush with the top of the bottom rail: the bottom is raised
+//! `rb − T`, which shortens a grooved back by as much. Every frameless
+//! formula above holds with these widths and depth.
+//!
+//! The front tree divides the frame's opening, `W − 2s` × `Hb − rt − rb`,
+//! less its rails and mullions; a fixed size in the tree is the size of an
+//! opening. A partial overlay front is its opening plus the overlay amount
+//! on each edge; an inset front is its opening less `G` on each edge. The
+//! doors of a pair are `G` apart. Overlays must stay on the frame and
+//! clear each other by `G` over a rail or mullion. A drawer box is as wide
+//! as its frame opening less the slide clearances, rather than the inside
+//! of the case.
+//!
 //! The cut size of a part is its finished size less the thickness of the
 //! bands on its ends (length) and sides (width).
 //!
-//! Anything else, such as other product types, face frames and overrides,
+//! Anything else, such as other product types, other face frame joinery
+//! and overrides,
 //! makes the product an error rather than giving parts that would be wrong.
 
 pub mod front;
@@ -75,10 +98,11 @@ use std::collections::HashMap;
 
 use opencabinet_model::{
     EdgeBand, FrontStyle, Id, InsertKind, Length, Library, Method, Product, Project, SheetMaterial,
+    SplitDirection,
 };
 
-use crate::front::{Opening, Rect, openings};
-use crate::rules::{Back, Overlay, Rules};
+use crate::front::{Divider, Dividers, Layout, Opening, Rect, lay_out};
+use crate::rules::{Back, FaceFrame, Fronts, Overlay, Rules};
 
 /// The four edges of a part: `x0` and `x1` are the ends of its length,
 /// `y0` and `y1` the sides of its width.
@@ -199,13 +223,8 @@ pub fn evaluate_product(
         .iter()
         .find(|s| s.id == product.standard)
         .ok_or("the standard is not in the library")?;
-    if standard.method != Method::Frameless {
-        return Err("face frame cabinets cannot be evaluated yet".into());
-    }
     let rules = Rules::of(standard)?;
-    if rules.fronts.overlay != Overlay::Full {
-        return Err("only full overlay fronts can be evaluated yet".into());
-    }
+    let face_frame = face_frame(standard.method, &rules)?;
 
     let lookup = Lookup {
         product,
@@ -214,8 +233,15 @@ pub fn evaluate_product(
     };
     let case = lookup.material("case")?;
     let back = lookup.material("back")?;
-    let case_band = lookup.band("edgeBandCase");
-    let front_band = lookup.band("edgeBandFronts");
+    let frame_material = match face_frame {
+        Some(_) => Some(lookup.material("faceFrame")?),
+        None => None,
+    };
+    // A face frame covers the front edges of the case.
+    let case_band = match face_frame {
+        Some(_) => None,
+        None => lookup.band("edgeBandCase"),
+    };
 
     let (w, h, d) = (product.width, product.height, product.depth);
     let t = case.actual_thickness;
@@ -225,9 +251,21 @@ pub fn evaluate_product(
         Kind::Base | Kind::Tall => rules.toe_kick.height,
     };
     let box_height = h - toe_kick;
-    let inner_width = w - t * 2;
-    if box_height <= t * 2 || inner_width <= Length::ZERO {
+    // The frame stands out past the case's sides and is part of its depth.
+    let overhang = face_frame.map_or(Length::ZERO, |f| f.overhang);
+    let frame_thickness = frame_material.map_or(Length::ZERO, |m| m.actual_thickness);
+    let case_width = w - overhang * 2;
+    let case_depth = d - frame_thickness;
+    let inner_width = case_width - t * 2;
+    if box_height <= t * 2 || inner_width <= Length::ZERO || case_depth <= Length::ZERO {
         return Err("the cabinet is too small for its toe kick and sides".into());
+    }
+    // The top of the bottom is flush with the top of the frame's bottom rail.
+    let bottom_raise = face_frame.map_or(Length::ZERO, |f| f.bottom_rail() - t);
+    if bottom_raise < Length::ZERO {
+        return Err(
+            "the face frame's bottom rail is narrower than the case bottom is thick".into(),
+        );
     }
 
     let maker = PartMaker { product, quantity };
@@ -235,35 +273,273 @@ pub fn evaluate_product(
     let size = CaseSize {
         box_height,
         inner_width,
-        width: w,
-        depth: d,
+        width: case_width,
+        depth: case_depth,
+        bottom_raise,
     };
     let mut parts = case_parts(kind, size, &rules, &maker, (case, back), front_edge);
 
-    if let Some(root) = &product.front {
-        let face = Rect {
-            x: Length::ZERO,
-            y: toe_kick,
-            width: w,
-            height: box_height,
-        };
-        let cabinet = Cabinet {
-            lookup: &lookup,
-            maker: &maker,
-            rules: &rules,
-            inner_width,
-            depth: d,
-            fronts: banded(front_band, &[0, 1, 2, 3]),
-            shelf_front: front_edge,
-        };
-        for opening in openings(root, face)? {
-            cabinet.insert(&opening, &mut parts)?;
-        }
+    let face = Rect {
+        x: Length::ZERO,
+        y: toe_kick,
+        width: w,
+        height: box_height,
+    };
+    let (layout, fit) = lay_out_front(product, face_frame, face, &rules.fronts)?;
+    if let (Some(frame), Some(material)) = (face_frame, frame_material) {
+        fit.check_frame(frame, &layout.dividers)?;
+        parts.extend(frame_parts(frame, material, face, &layout.dividers, &maker));
+    }
+    let cabinet = Cabinet {
+        lookup: &lookup,
+        maker: &maker,
+        rules: &rules,
+        fit,
+        inner_width,
+        depth: case_depth,
+    };
+    for opening in &layout.openings {
+        cabinet.insert(opening, &mut parts)?;
     }
     Ok(Evaluated {
         parts,
         notes: lookup.notes.into_inner(),
     })
+}
+
+/// The face frame rules of a standard built by `method`, which has none
+/// when it is frameless.
+fn face_frame(method: Method, rules: &Rules) -> Result<Option<&FaceFrame>, String> {
+    match method {
+        Method::Frameless => {
+            if rules.fronts.overlay != Overlay::Full {
+                return Err("frameless cabinets take full overlay fronts".into());
+            }
+            Ok(None)
+        }
+        Method::FaceFrame => rules
+            .face_frame
+            .as_ref()
+            .map(Some)
+            .ok_or_else(|| "the standard has no `faceFrame` rules".into()),
+    }
+}
+
+/// The product's front laid over `face`, inside the face frame if there is
+/// one, and how its fronts fit.
+fn lay_out_front<'p>(
+    product: &'p Product,
+    face_frame: Option<&FaceFrame>,
+    face: Rect,
+    fronts: &Fronts,
+) -> Result<(Layout<'p>, Fit), String> {
+    let (opening, dividers, fit) = match face_frame {
+        None => (
+            face,
+            Dividers::default(),
+            Fit::Frameless { gap: fronts.gap },
+        ),
+        Some(frame) => (frame.opening(face)?, frame.dividers(), Fit::framed(fronts)?),
+    };
+    let layout = match &product.front {
+        Some(root) => lay_out(root, opening, dividers)?,
+        None => Layout::default(),
+    };
+    Ok((layout, fit))
+}
+
+/// The members of a face frame the size of `face`: stiles the full height,
+/// the top and bottom rails between them, and the rails and mullions
+/// between openings. None of them is banded.
+fn frame_parts(
+    frame: &FaceFrame,
+    material: &SheetMaterial,
+    face: Rect,
+    dividers: &[Divider<'_>],
+    maker: &PartMaker<'_>,
+) -> Vec<Part> {
+    let stile = frame.stile_width;
+    let between = face.width - stile * 2;
+    let part =
+        |key: &str, role, length, width| maker.part(key, role, material, length, width, BARE);
+    // Every member runs its grain along its length.
+    let mut parts = vec![
+        part("frame/stile.left", "frameStile", face.height, stile),
+        part("frame/stile.right", "frameStile", face.height, stile),
+        part("frame/rail.top", "frameRail", between, frame.top_rail()),
+        part(
+            "frame/rail.bottom",
+            "frameRail",
+            between,
+            frame.bottom_rail(),
+        ),
+    ];
+    for divider in dividers {
+        let r = divider.rect;
+        let (name, role, length, width) = match divider.direction {
+            SplitDirection::Horizontal => ("rail", "frameRail", r.width, r.height),
+            SplitDirection::Vertical => ("mullion", "frameMullion", r.height, r.width),
+        };
+        let key = format!("frame/{}/{name}.{}", divider.split.id, divider.index);
+        parts.push(part(&key, role, length, width));
+    }
+    parts
+}
+
+/// What the evaluator works out from a standard's face frame rules.
+trait FrameSizes {
+    fn top_rail(&self) -> Length;
+    fn bottom_rail(&self) -> Length;
+    /// The widths of the rails and mullions between openings.
+    fn dividers(&self) -> Dividers;
+    /// The opening inside the stiles and the top and bottom rails of a
+    /// frame the size of `face`.
+    fn opening(&self, face: Rect) -> Result<Rect, String>;
+}
+
+impl FrameSizes for FaceFrame {
+    fn top_rail(&self) -> Length {
+        self.top_rail_width.unwrap_or(self.rail_width)
+    }
+
+    fn bottom_rail(&self) -> Length {
+        self.bottom_rail_width.unwrap_or(self.rail_width)
+    }
+
+    fn dividers(&self) -> Dividers {
+        Dividers {
+            rail: self.rail_width,
+            mullion: self.mullion_width.unwrap_or(self.stile_width),
+        }
+    }
+
+    fn opening(&self, face: Rect) -> Result<Rect, String> {
+        let opening = Rect {
+            x: face.x + self.stile_width,
+            y: face.y + self.bottom_rail(),
+            width: face.width - self.stile_width * 2,
+            height: face.height - self.top_rail() - self.bottom_rail(),
+        };
+        if opening.width <= Length::ZERO || opening.height <= Length::ZERO {
+            return Err("the cabinet is too small for its face frame".into());
+        }
+        Ok(opening)
+    }
+}
+
+/// How fronts sit on their openings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Fit {
+    /// Frameless: fronts share the box face, `gap` apart.
+    Frameless { gap: Length },
+    /// Face frame: fronts cover the frame by `by` around their opening, or
+    /// stand back from it when `by` is less than zero (inset); the doors of
+    /// a pair are `gap` apart.
+    Framed { by: Length, gap: Length },
+}
+
+impl Fit {
+    /// How the fronts of a face frame cabinet fit.
+    fn framed(fronts: &Fronts) -> Result<Self, String> {
+        let by = match fronts.overlay {
+            Overlay::Partial => fronts
+                .overlay_amount
+                .ok_or("partial overlay fronts need an `overlayAmount`")?,
+            Overlay::Inset => -fronts.gap,
+            Overlay::Full => {
+                return Err("face frame cabinets take partial overlay or inset fronts".into());
+            }
+        };
+        Ok(Self::Framed {
+            by,
+            gap: fronts.gap,
+        })
+    }
+
+    /// That overlaid fronts stay on the frame, and clear each other by at
+    /// least the gap over the rails and mullions between them.
+    fn check_frame(self, frame: &FaceFrame, dividers: &[Divider<'_>]) -> Result<(), String> {
+        let Self::Framed { by, gap } = self else {
+            return Ok(());
+        };
+        if by <= Length::ZERO {
+            return Ok(());
+        }
+        let edge = frame
+            .stile_width
+            .min(frame.top_rail())
+            .min(frame.bottom_rail());
+        if by > edge {
+            return Err("the fronts overlay more than the face frame around them is wide".into());
+        }
+        for divider in dividers {
+            let width = match divider.direction {
+                SplitDirection::Horizontal => divider.rect.height,
+                SplitDirection::Vertical => divider.rect.width,
+            };
+            if width - by * 2 < gap {
+                return Err(
+                    "a rail or mullion is too narrow for the fronts on each side \
+                    of it to clear each other by the gap"
+                        .into(),
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// `count` fronts side by side for `opening`, left to right.
+    fn fronts(self, opening: Rect, count: u32) -> Result<Vec<Rect>, String> {
+        let mut x = opening.x;
+        let fronts: Vec<Rect> = match self {
+            // Each front is its share of the face less the gap.
+            Self::Frameless { gap } => opening
+                .width
+                .split(count)
+                .into_iter()
+                .map(|width| {
+                    let front = Rect {
+                        x,
+                        width,
+                        ..opening
+                    }
+                    .inset(gap);
+                    x += width;
+                    front
+                })
+                .collect(),
+            // The fronts share what covers the opening, less the gaps
+            // between them.
+            Self::Framed { by, gap } => {
+                let whole = Rect {
+                    x: opening.x - by,
+                    y: opening.y - by,
+                    width: opening.width + by * 2,
+                    height: opening.height + by * 2,
+                };
+                let room = whole.width - gap * (i64::from(count) - 1);
+                if room <= Length::ZERO {
+                    return Err("the opening is too small for its fronts".into());
+                }
+                x = whole.x;
+                room.split(count)
+                    .into_iter()
+                    .map(|width| {
+                        let front = Rect { x, width, ..whole };
+                        x += width + gap;
+                        front
+                    })
+                    .collect()
+            }
+        };
+        if fronts
+            .iter()
+            .any(|f| f.width <= Length::ZERO || f.height <= Length::ZERO)
+        {
+            return Err("the opening is too small for its fronts".into());
+        }
+        Ok(fronts)
+    }
 }
 
 /// The overall sizes a case is built from.
@@ -275,6 +551,8 @@ struct CaseSize {
     inner_width: Length,
     width: Length,
     depth: Length,
+    /// How far the bottom sits above the bottom of the sides.
+    bottom_raise: Length,
 }
 
 /// The case's parts: sides, bottom, top or stretchers, and back.
@@ -291,6 +569,7 @@ fn case_parts(
         inner_width,
         width: w,
         depth: d,
+        bottom_raise,
     } = size;
     let t = case.actual_thickness;
     let mut parts = vec![
@@ -331,7 +610,7 @@ fn case_parts(
     };
     let (back_length, back_width) = match rules.back {
         Back::Grooved { groove_depth } => (
-            box_height - (t - groove_depth) * grooved_ends,
+            box_height - (t - groove_depth) * grooved_ends - bottom_raise,
             inner_width + groove_depth * 2,
         ),
         Back::Applied => (box_height, w),
@@ -368,16 +647,19 @@ struct Cabinet<'c, 'p> {
     lookup: &'c Lookup<'p>,
     maker: &'c PartMaker<'p>,
     rules: &'c Rules,
+    fit: Fit,
     /// Between the sides.
     inner_width: Length,
+    /// Of the case, behind any face frame.
     depth: Length,
-    /// The bands on a front's four edges.
-    fronts: Bands<'p>,
-    /// The band on a shelf's front edge.
-    shelf_front: Bands<'p>,
 }
 
-impl Cabinet<'_, '_> {
+impl<'p> Cabinet<'_, 'p> {
+    /// The bands on a slab front's four edges.
+    fn front_bands(&self) -> Bands<'p> {
+        banded(self.lookup.band("edgeBandFronts"), &[0, 1, 2, 3])
+    }
+
     /// The parts an opening's insert produces.
     fn insert(&self, opening: &Opening<'_>, parts: &mut Vec<Part>) -> Result<(), String> {
         let insert = opening.insert;
@@ -386,7 +668,6 @@ impl Cabinet<'_, '_> {
         }
         let five_piece = insert.style == Some(FrontStyle::FivePiece);
         let prefix = format!("front/{}", opening.node.id);
-        let gap = self.rules.fronts.gap;
         match &insert.kind {
             InsertKind::Doors => {
                 let material = self.lookup.material("doors")?;
@@ -394,24 +675,22 @@ impl Cabinet<'_, '_> {
                 if !(1..=2).contains(&count) {
                     return Err("an opening takes one or two doors".into());
                 }
-                let mut x = opening.rect.x;
-                for (i, width) in opening.rect.width.split(count).into_iter().enumerate() {
-                    let door = Rect {
-                        x,
-                        width,
-                        ..opening.rect
-                    }
-                    .inset(gap);
-                    x += width;
+                let doors = self.fit.fronts(opening.rect, count)?;
+                for (i, door) in doors.into_iter().enumerate() {
                     let key = format!("{prefix}/door.{}", i + 1);
                     if five_piece {
                         self.five_piece(&key, door, parts)?;
                     } else {
                         // Slab doors run their grain up.
                         let (length, width) = (door.height, door.width);
-                        let part =
-                            self.maker
-                                .part(&key, "door", material, length, width, self.fronts);
+                        let part = self.maker.part(
+                            &key,
+                            "door",
+                            material,
+                            length,
+                            width,
+                            self.front_bands(),
+                        );
                         parts.push(part);
                     }
                 }
@@ -419,7 +698,7 @@ impl Cabinet<'_, '_> {
             }
             InsertKind::Drawer | InsertKind::FalseFront => {
                 let material = self.lookup.material_or("drawerFronts", "doors")?;
-                let front = opening.rect.inset(gap);
+                let front = self.fit.fronts(opening.rect, 1)?[0];
                 let (key, role) = if insert.kind == InsertKind::Drawer {
                     (format!("{prefix}/drawer/front"), "drawerFront")
                 } else {
@@ -430,13 +709,13 @@ impl Cabinet<'_, '_> {
                 } else {
                     // Slab drawer and false fronts run their grain across.
                     let (length, width) = (front.width, front.height);
-                    let part = self
-                        .maker
-                        .part(&key, role, material, length, width, self.fronts);
+                    let part =
+                        self.maker
+                            .part(&key, role, material, length, width, self.front_bands());
                     parts.push(part);
                 }
                 if insert.kind == InsertKind::Drawer {
-                    self.drawer_box(&prefix, opening.rect.height, parts)?;
+                    self.drawer_box(&prefix, opening.rect, parts)?;
                 }
             }
             InsertKind::Open => self.shelves(&prefix, insert.shelves, parts)?,
@@ -508,15 +787,9 @@ impl Cabinet<'_, '_> {
         Ok(())
     }
 
-    /// The box of a drawer whose opening is `opening_height` tall: sides
-    /// the full depth, front and back between them, and the bottom in a
-    /// groove in all four.
-    fn drawer_box(
-        &self,
-        prefix: &str,
-        opening_height: Length,
-        parts: &mut Vec<Part>,
-    ) -> Result<(), String> {
+    /// The box of a drawer for `opening`: sides the full depth, front and
+    /// back between them, and the bottom in a groove in all four.
+    fn drawer_box(&self, prefix: &str, opening: Rect, parts: &mut Vec<Part>) -> Result<(), String> {
         let rules = self
             .rules
             .drawers
@@ -533,8 +806,20 @@ impl Cabinet<'_, '_> {
             .filter(|&l| l <= room)
             .max()
             .ok_or("no slide in the standard is short enough for this cabinet")?;
-        let height = opening_height - rules.vertical_clearance;
-        let width = self.inner_width - rules.side_clearance * 2;
+        let height = opening.height - rules.vertical_clearance;
+        // Behind a face frame the box must pass through the frame's
+        // opening; the slides are set out to it on blocking.
+        let room = match self.fit {
+            Fit::Frameless { .. } => self.inner_width,
+            Fit::Framed { .. } => {
+                self.lookup.note(
+                    "drawer slides in face frame cabinets mount on blocking out to the \
+                     frame opening, which is not in the cut list yet",
+                );
+                opening.width
+            }
+        };
+        let width = room - rules.side_clearance * 2;
         let between = width - t * 2;
         if height <= Length::ZERO || between <= Length::ZERO {
             return Err("the drawer opening is too small for a drawer box".into());
@@ -577,6 +862,7 @@ impl Cabinet<'_, '_> {
             .as_ref()
             .ok_or("the standard has no `shelves` rules")?;
         let material = self.lookup.material_or("shelves", "case")?;
+        let front = banded(self.lookup.band("edgeBandCase"), &[Y1]);
         let length = self.inner_width - rules.side_clearance;
         let width = self.depth - rules.front_setback - rules.back_allowance;
         if length <= Length::ZERO || width <= Length::ZERO {
@@ -586,7 +872,7 @@ impl Cabinet<'_, '_> {
             let key = format!("{prefix}/shelf.{i}");
             let part = self
                 .maker
-                .part(&key, "shelf", material, length, width, self.shelf_front);
+                .part(&key, "shelf", material, length, width, front);
             parts.push(part);
         }
         Ok(())

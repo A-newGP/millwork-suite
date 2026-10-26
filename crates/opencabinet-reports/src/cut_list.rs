@@ -167,6 +167,15 @@ fn part_name(part: &Part) -> String {
         ("drawerBack", _) => "Drawer box, back".into(),
         ("drawerBottom", _) => "Drawer box, bottom".into(),
         ("shelf", shelf) => format!("Shelf {}", shelf.trim_start_matches("shelf.")),
+        ("frameStile", "stile.left") => "Face frame, left stile".into(),
+        ("frameStile", "stile.right") => "Face frame, right stile".into(),
+        ("frameRail", "rail.top") => "Face frame, top rail".into(),
+        ("frameRail", "rail.bottom") => "Face frame, bottom rail".into(),
+        ("frameRail", rail) => format!("Face frame, rail {}", rail.trim_start_matches("rail.")),
+        ("frameMullion", mullion) => format!(
+            "Face frame, mullion {}",
+            mullion.trim_start_matches("mullion.")
+        ),
         (role, _) => role.into(),
     }
 }
