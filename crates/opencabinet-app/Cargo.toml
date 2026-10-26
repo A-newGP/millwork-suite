@@ -17,6 +17,8 @@ path = "src/main.rs"
 
 [dependencies]
 opencabinet-model = { workspace = true }
+opencabinet-format = { workspace = true }
+rfd = "0.17.2"
 slint = "1.18.1"
 
 [build-dependencies]
