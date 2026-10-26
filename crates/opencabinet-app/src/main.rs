@@ -9,5 +9,7 @@
 use slint::ComponentHandle;
 
 fn main() -> Result<(), slint::PlatformError> {
-    opencabinet_app::create()?.run()
+    let window = opencabinet_app::create()?;
+    opencabinet_app::perf::watch_first_frame(&window);
+    window.run()
 }

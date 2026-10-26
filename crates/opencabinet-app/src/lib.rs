@@ -5,6 +5,7 @@
 //! without a window system (see `tests/window.rs`).
 
 pub mod designer;
+pub mod perf;
 
 use std::cell::RefCell;
 use std::rc::Rc;

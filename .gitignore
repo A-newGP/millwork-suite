@@ -30,3 +30,6 @@ node_modules/
 
 # Claude Code personal settings
 .claude/settings.local.json
+
+# Performance measurement builds (scripts/performance.ps1).
+/perf/
