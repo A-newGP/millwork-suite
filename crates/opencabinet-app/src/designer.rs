@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! What the window shows and edits, without any window: the open project,
-//! where it is saved, and the cabinet being sized. Keeping it free of Slint
-//! lets it be tested directly.
+//! where it is saved, its cabinets and the one being edited. Keeping it
+//! free of Slint lets it be tested directly.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -36,15 +36,15 @@ impl Dimension {
     pub const ALL: [Self; 3] = [Self::Width, Self::Height, Self::Depth];
 }
 
-/// The editing state of the window: a project and the file it lives in.
-///
-/// The window edits the project's first product; editing more products
-/// arrives with the designer's product list.
+/// The editing state of the window: a project, the file it lives in, and
+/// which of its cabinets is being edited.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Designer {
     document: Document,
     path: Option<PathBuf>,
     modified: bool,
+    /// The index of the product being edited; a project always has one.
+    selected: usize,
 }
 
 impl Default for Designer {
@@ -63,6 +63,7 @@ impl Designer {
             document: new_document(units),
             path: None,
             modified: false,
+            selected: 0,
         }
     }
 
@@ -80,6 +81,7 @@ impl Designer {
             document,
             path: Some(path.to_owned()),
             modified: false,
+            selected: 0,
         })
     }
 
@@ -133,6 +135,157 @@ impl Designer {
         &self.product().label
     }
 
+    /// Relabels the cabinet being edited.
+    ///
+    /// # Errors
+    /// A message for the user when the label is empty or another cabinet
+    /// has it; the label is then left unchanged.
+    pub fn set_label(&mut self, text: &str) -> Result<(), String> {
+        let label = text.trim();
+        if label.is_empty() {
+            return Err("A label cannot be empty".into());
+        }
+        if self.cabinet_labeled(label) {
+            return Err(format!("Another cabinet is already labeled {label}"));
+        }
+        if self.product().label != label {
+            label.clone_into(&mut self.product_mut().label);
+            self.modified = true;
+        }
+        Ok(())
+    }
+
+    /// The project's cabinets as the list shows them: label, kind and
+    /// width, such as "B1 · Base · 30\"".
+    #[must_use]
+    pub fn cabinets(&self) -> Vec<String> {
+        self.document
+            .project
+            .products
+            .iter()
+            .map(|p| {
+                let kind = CabinetKind::of(&p.product_type).map_or_else(
+                    || {
+                        p.product_type
+                            .split('@')
+                            .next()
+                            .unwrap_or_default()
+                            .to_owned()
+                    },
+                    |k| k.name().to_owned(),
+                );
+                let width = p.width.show(self.units(), self.precision()).text;
+                format!("{} · {kind} · {width}", p.label)
+            })
+            .collect()
+    }
+
+    /// Which cabinet is being edited, by its place in the list.
+    #[must_use]
+    pub fn selected(&self) -> usize {
+        self.selected
+    }
+
+    /// Edits another cabinet, by its place in the list; returns whether
+    /// there is one there.
+    pub fn select(&mut self, index: usize) -> bool {
+        let exists = index < self.document.project.products.len();
+        if exists {
+            self.selected = index;
+        }
+        exists
+    }
+
+    /// Adds a base cabinet after the one being edited, with its standard
+    /// and materials, and edits it.
+    pub fn add(&mut self) {
+        let source = self.product();
+        let kind = CabinetKind::Base;
+        let (height, depth) = kind.usual_height_and_depth();
+        let product = Product {
+            id: Id::new(),
+            label: self.free_label(&kind.label_letter().to_string()),
+            product_type: kind.product_type().into(),
+            standard: source.standard,
+            width: Length::from_inches(30),
+            height,
+            depth,
+            quantity: None,
+            parameters: BTreeMap::default(),
+            materials: source.materials.clone(),
+            front: Some(kind.usual_front()),
+            overrides: Vec::new(),
+            extensions: BTreeMap::default(),
+            unknown: BTreeMap::default(),
+        };
+        self.insert(product);
+    }
+
+    /// Adds a copy of the cabinet being edited after it, with the next
+    /// free label of its letters, and edits it. Copies have identities of
+    /// their own.
+    pub fn duplicate(&mut self) {
+        let mut product = self.product().clone();
+        let letters: String = product
+            .label
+            .chars()
+            .take_while(char::is_ascii_alphabetic)
+            .collect();
+        product.id = Id::new();
+        product.label = self.free_label(&letters);
+        if let Some(front) = &mut product.front {
+            renew_ids(front);
+        }
+        self.insert(product);
+    }
+
+    /// Removes the cabinet being edited, with its placements in the
+    /// rooms, and edits the one that takes its place in the list.
+    ///
+    /// # Errors
+    /// A message for the user when it is the only cabinet: the window
+    /// always has one to edit.
+    pub fn delete(&mut self) -> Result<(), String> {
+        let project = &mut self.document.project;
+        if project.products.len() == 1 {
+            return Err("A project keeps at least one cabinet".into());
+        }
+        let removed = project.products.remove(self.selected);
+        for room in &mut project.rooms {
+            room.placements.retain(|p| p.product != removed.id);
+        }
+        self.selected = self.selected.min(project.products.len() - 1);
+        self.modified = true;
+        Ok(())
+    }
+
+    fn insert(&mut self, product: Product) {
+        self.selected += 1;
+        self.document
+            .project
+            .products
+            .insert(self.selected, product);
+        self.modified = true;
+    }
+
+    /// `prefix` and the smallest number no cabinet uses with it:
+    /// B1, B2… A cabinet without letters gets C1, C2…
+    fn free_label(&self, prefix: &str) -> String {
+        let prefix = if prefix.is_empty() { "C" } else { prefix };
+        // With n cabinets, one of the first n + 1 numbers is free.
+        (1..=self.document.project.products.len() + 1)
+            .map(|n| format!("{prefix}{n}"))
+            .find(|label| {
+                !self
+                    .document
+                    .project
+                    .products
+                    .iter()
+                    .any(|p| p.label == *label)
+            })
+            .expect("one of the first n + 1 numbers is free")
+    }
+
     /// The kind of cabinet being edited, if the window offers it.
     #[must_use]
     pub fn kind(&self) -> Option<CabinetKind> {
@@ -147,18 +300,25 @@ impl Designer {
             return;
         }
         let five_piece = self.five_piece();
-        let product = &mut self.document.project.products[0];
+        let number: String = self
+            .label()
+            .chars()
+            .skip_while(|c| !c.is_ascii_digit())
+            .collect();
+        let wanted = format!("{}{number}", kind.label_letter());
+        // Keep the number unless another cabinet has that label.
+        let label = if number.is_empty() || self.cabinet_labeled(&wanted) {
+            self.free_label(&kind.label_letter().to_string())
+        } else {
+            wanted
+        };
+        let product = self.product_mut();
         let (height, depth) = kind.usual_height_and_depth();
         product.product_type = kind.product_type().into();
         product.height = height;
         product.depth = depth;
         product.front = Some(kind.usual_front());
-        let number: String = product
-            .label
-            .chars()
-            .skip_while(|c| !c.is_ascii_digit())
-            .collect();
-        product.label = format!("{}{number}", kind.label_letter());
+        product.label = label;
         // The new front keeps the style the fronts had.
         self.set_five_piece(five_piece);
         self.modified = true;
@@ -186,7 +346,7 @@ impl Designer {
         } else {
             FrontStyle::Slab
         };
-        if let Some(front) = &mut self.document.project.products[0].front {
+        if let Some(front) = &mut self.product_mut().front {
             visit_mut(front, &mut |insert| {
                 if matches!(
                     insert.kind,
@@ -238,7 +398,7 @@ impl Designer {
         if length <= Length::ZERO {
             return Err("Must be greater than zero".into());
         }
-        let product = &mut self.document.project.products[0];
+        let product = self.product_mut();
         let field = match dimension {
             Dimension::Width => &mut product.width,
             Dimension::Height => &mut product.height,
@@ -330,7 +490,22 @@ impl Designer {
     }
 
     fn product(&self) -> &Product {
-        &self.document.project.products[0]
+        &self.document.project.products[self.selected]
+    }
+
+    fn product_mut(&mut self) -> &mut Product {
+        &mut self.document.project.products[self.selected]
+    }
+
+    /// Whether a cabinet other than the one being edited has `label`.
+    fn cabinet_labeled(&self, label: &str) -> bool {
+        let selected = self.selected;
+        self.document
+            .project
+            .products
+            .iter()
+            .enumerate()
+            .any(|(i, p)| i != selected && p.label == label)
     }
 
     /// The project's display precision, or the units' usual one when the
@@ -352,6 +527,14 @@ fn visit(node: &FrontNode, f: &mut impl FnMut(&Insert)) {
     }
     for child in &node.children {
         visit(child, f);
+    }
+}
+
+/// Gives every node of a front tree a new identity, for a copy.
+fn renew_ids(node: &mut FrontNode) {
+    node.id = Id::new();
+    for child in &mut node.children {
+        renew_ids(child);
     }
 }
 
@@ -814,6 +997,81 @@ mod tests {
         std::fs::write(&path, "not a project").unwrap();
         let error = Designer::open(&path).unwrap_err();
         assert!(error.starts_with("Cannot open the file:"), "{error}");
+    }
+
+    #[test]
+    fn cabinets_are_added_copied_and_removed() {
+        let mut designer = Designer::default();
+        designer.add();
+        assert_eq!(designer.selected(), 1);
+        assert_eq!(designer.label(), "B2");
+        designer.edit(Dimension::Width, "18").unwrap();
+        designer.duplicate();
+        assert_eq!(designer.label(), "B3");
+        assert_eq!(
+            designer.cabinets(),
+            ["B1 · Base · 30\"", "B2 · Base · 18\"", "B3 · Base · 18\""]
+        );
+        // A copy has identities of its own, so the project stays valid, and
+        // the cut list covers every cabinet.
+        assert_eq!(designer.issues(), []);
+        let products: Vec<String> = designer
+            .cut_list()
+            .rows
+            .iter()
+            .map(|r| r.product.clone())
+            .filter(|p| p != "B1")
+            .collect();
+        assert_eq!(products.len(), 28);
+
+        designer.delete().unwrap();
+        assert_eq!((designer.selected(), designer.label()), (1, "B2"));
+        designer.select(0);
+        designer.delete().unwrap();
+        assert_eq!(designer.label(), "B2");
+        assert_eq!(
+            designer.delete(),
+            Err("A project keeps at least one cabinet".into())
+        );
+        assert!(!designer.select(1));
+        assert!(designer.modified());
+    }
+
+    #[test]
+    fn labels_are_unique_and_not_empty() {
+        let mut designer = Designer::default();
+        designer.add();
+        assert_eq!(
+            designer.set_label("B1"),
+            Err("Another cabinet is already labeled B1".into())
+        );
+        assert_eq!(
+            designer.set_label("  "),
+            Err("A label cannot be empty".into())
+        );
+        designer.set_label(" Sink ").unwrap();
+        assert_eq!(designer.label(), "Sink");
+        // Copies of a cabinet without a number count from 1.
+        designer.duplicate();
+        assert_eq!(designer.label(), "Sink1");
+
+        // A new kind keeps the number unless another cabinet has it.
+        designer.set_label("W1").unwrap();
+        designer.select(0);
+        designer.set_kind(CabinetKind::Wall);
+        assert_eq!(designer.label(), "W2");
+    }
+
+    #[test]
+    fn removing_a_cabinet_removes_its_placements() {
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/kitchen.ocab");
+        let mut designer = Designer::open(&fixture).unwrap();
+        let placed = |d: &Designer| d.document.project.rooms[0].placements.len();
+        assert_eq!(placed(&designer), 7);
+        // B30 is placed twice.
+        designer.delete().unwrap();
+        assert_eq!(placed(&designer), 5);
+        assert_eq!(designer.label(), "SB36");
     }
 
     #[test]
