@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 OpenCabinet contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { LineEdit, Palette, StandardTableView } from "std-widgets.slint";
+import { ComboBox, LineEdit, Palette, StandardTableView } from "std-widgets.slint";
 
 // A length field: a label, the text as typed, and below it either the value
 // read back in the display precision or why it cannot be read.
@@ -38,6 +38,9 @@ export component AppWindow inherits Window {
 
     in property <bool> metric;
     in property <string> cabinet-label: "Cabinet";
+    // The kinds of cabinet offered, and which one is being edited.
+    in property <[string]> kinds;
+    in-out property <int> kind-index;
     in property <string> status;
     in-out property <string> width-text;
     in-out property <string> height-text;
@@ -59,6 +62,7 @@ export component AppWindow inherits Window {
     callback height-edited(text: string);
     callback depth-edited(text: string);
     callback units-chosen(metric: bool);
+    callback kind-chosen(index: int);
     callback new-project();
     callback open-project();
     callback save-project();
@@ -126,6 +130,13 @@ export component AppWindow inherits Window {
                 spacing: 12px;
                 alignment: start;
                 Text { text: root.cabinet-label; font-size: 18px; font-weight: 700; }
+                Text { text: "Type"; }
+                ComboBox {
+                    accessible-label: "Type";
+                    model: root.kinds;
+                    current-index <=> root.kind-index;
+                    selected => { root.kind-chosen(self.current-index); }
+                }
                 LengthField {
                     label: "Width";
                     text <=> root.width-text;

@@ -16,7 +16,7 @@ use std::rc::Rc;
 use opencabinet_model::Units;
 use slint::{CloseRequestResponse, ComponentHandle, ModelRc, StandardListViewItem, VecModel};
 
-use crate::designer::{Designer, Dimension};
+use crate::designer::{CabinetKind, Designer, Dimension};
 use crate::dialogs::{Dialogs, FileKind, SystemDialogs};
 use opencabinet_reports::Separator;
 
@@ -65,6 +65,13 @@ pub fn create_with(dialogs: Rc<dyn Dialogs>) -> Result<AppWindow, slint::Platfor
     }
     let handle = Rc::clone(&app);
     window.on_units_chosen(move |metric| handle.choose_units(metric));
+    window.set_kinds(ModelRc::new(VecModel::from(
+        CabinetKind::ALL
+            .map(|k| slint::SharedString::from(k.name()))
+            .to_vec(),
+    )));
+    let handle = Rc::clone(&app);
+    window.on_kind_chosen(move |index| handle.choose_kind(index));
     let handle = Rc::clone(&app);
     window.on_new_project(move || handle.new_project());
     let handle = Rc::clone(&app);
@@ -140,6 +147,21 @@ impl App {
             Units::Imperial
         };
         self.designer.borrow_mut().set_units(units);
+        clear_errors(&window);
+        self.show(&window, true);
+    }
+
+    fn choose_kind(&self, index: i32) {
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
+        let Some(&kind) = usize::try_from(index)
+            .ok()
+            .and_then(|i| CabinetKind::ALL.get(i))
+        else {
+            return;
+        };
+        self.designer.borrow_mut().set_kind(kind);
         clear_errors(&window);
         self.show(&window, true);
     }
@@ -282,6 +304,10 @@ impl App {
         );
         window.set_window_title(designer.title().into());
         window.set_cabinet_label(designer.label().into());
+        let kind = designer
+            .kind()
+            .and_then(|k| CabinetKind::ALL.iter().position(|&c| c == k));
+        window.set_kind_index(kind.and_then(|i| i32::try_from(i).ok()).unwrap_or(-1));
         let metric = designer.units() == Units::Metric;
         window.set_metric(metric);
         let units = if metric { "millimeters" } else { "inches" };

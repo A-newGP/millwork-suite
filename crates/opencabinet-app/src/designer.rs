@@ -131,6 +131,34 @@ impl Designer {
         &self.product().label
     }
 
+    /// The kind of cabinet being edited, if the window offers it.
+    #[must_use]
+    pub fn kind(&self) -> Option<CabinetKind> {
+        CabinetKind::of(&self.product().product_type)
+    }
+
+    /// Makes the cabinet another kind, with that kind's usual height, depth
+    /// and front, and a label that starts with its letter. The width and
+    /// the materials stay.
+    pub fn set_kind(&mut self, kind: CabinetKind) {
+        if self.kind() == Some(kind) {
+            return;
+        }
+        let product = &mut self.document.project.products[0];
+        let (height, depth) = kind.usual_height_and_depth();
+        product.product_type = kind.product_type().into();
+        product.height = height;
+        product.depth = depth;
+        product.front = Some(kind.usual_front());
+        let number: String = product
+            .label
+            .chars()
+            .skip_while(|c| !c.is_ascii_digit())
+            .collect();
+        product.label = format!("{}{number}", kind.label_letter());
+        self.modified = true;
+    }
+
     /// The units lengths are typed and shown in.
     #[must_use]
     pub fn units(&self) -> Units {
@@ -370,30 +398,15 @@ fn base_cabinet(library: &Library) -> Product {
         library.materials[2].id,
         library.edge_bands[0].id,
     );
-    let leaf = |size, kind, count| FrontNode {
-        id: Id::new(),
-        size: Some(size),
-        split: None,
-        children: Vec::new(),
-        insert: Some(Insert {
-            kind,
-            style: Some(FrontStyle::Slab),
-            count,
-            hinge_side: None,
-            shelves: None,
-            adjustments: Vec::new(),
-            unknown: BTreeMap::default(),
-        }),
-        unknown: BTreeMap::default(),
-    };
+    let (height, depth) = CabinetKind::Base.usual_height_and_depth();
     Product {
         id: Id::new(),
         label: "B1".into(),
-        product_type: "base-cabinet@1".into(),
+        product_type: CabinetKind::Base.product_type().into(),
         standard: library.standards[0].id,
         width: Length::from_inches(30),
-        height: inches(69, 2),
-        depth: Length::from_inches(24),
+        height,
+        depth,
         quantity: None,
         parameters: BTreeMap::default(),
         materials: [
@@ -408,24 +421,106 @@ fn base_cabinet(library: &Library) -> Product {
         .into_iter()
         .map(|(role, id)| (role.to_owned(), id))
         .collect(),
-        front: Some(FrontNode {
-            id: Id::new(),
-            size: None,
-            split: Some(SplitDirection::Horizontal),
-            children: vec![
-                leaf(
-                    Size::Length(Length::from_inches(6)),
-                    InsertKind::Drawer,
-                    None,
-                ),
-                leaf(Size::Share(1), InsertKind::Doors, Some(2)),
-            ],
-            insert: None,
-            unknown: BTreeMap::default(),
-        }),
+        front: Some(CabinetKind::Base.usual_front()),
         overrides: Vec::new(),
         extensions: BTreeMap::default(),
         unknown: BTreeMap::default(),
+    }
+}
+
+/// The kinds of cabinet the window offers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CabinetKind {
+    /// Stands on the floor, under the counter.
+    Base,
+    /// Hangs on the wall.
+    Wall,
+    /// Floor to near the ceiling: pantries and oven towers.
+    Tall,
+}
+
+impl CabinetKind {
+    /// Every kind, in the order the window lists them.
+    pub const ALL: [Self; 3] = [Self::Base, Self::Wall, Self::Tall];
+
+    /// The name the window shows.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Base => "Base",
+            Self::Wall => "Wall",
+            Self::Tall => "Tall",
+        }
+    }
+
+    fn product_type(self) -> &'static str {
+        match self {
+            Self::Base => "base-cabinet@1",
+            Self::Wall => "wall-cabinet@1",
+            Self::Tall => "tall-cabinet@1",
+        }
+    }
+
+    fn of(product_type: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|k| k.product_type() == product_type)
+    }
+
+    /// The first letter of the shop's usual labels: B30, W30, T24.
+    fn label_letter(self) -> char {
+        self.name().chars().next().expect("names are not empty")
+    }
+
+    /// 34-1/2" × 24" for a base cabinet, 30" × 12" for a wall cabinet,
+    /// 84" × 24" for a tall one.
+    fn usual_height_and_depth(self) -> (Length, Length) {
+        match self {
+            Self::Base => (inches(69, 2), Length::from_inches(24)),
+            Self::Wall => (Length::from_inches(30), Length::from_inches(12)),
+            Self::Tall => (Length::from_inches(84), Length::from_inches(24)),
+        }
+    }
+
+    /// A drawer over a pair of doors for a base cabinet; a pair of doors
+    /// with two shelves for a wall cabinet, or four for a tall one.
+    fn usual_front(self) -> FrontNode {
+        let leaf = |size, kind, count, shelves| FrontNode {
+            id: Id::new(),
+            size,
+            split: None,
+            children: Vec::new(),
+            insert: Some(Insert {
+                kind,
+                style: Some(FrontStyle::Slab),
+                count,
+                hinge_side: None,
+                shelves,
+                adjustments: Vec::new(),
+                unknown: BTreeMap::default(),
+            }),
+            unknown: BTreeMap::default(),
+        };
+        match self {
+            Self::Base => FrontNode {
+                id: Id::new(),
+                size: None,
+                split: Some(SplitDirection::Horizontal),
+                children: vec![
+                    leaf(
+                        Some(Size::Length(Length::from_inches(6))),
+                        InsertKind::Drawer,
+                        None,
+                        None,
+                    ),
+                    leaf(Some(Size::Share(1)), InsertKind::Doors, Some(2), None),
+                ],
+                insert: None,
+                unknown: BTreeMap::default(),
+            },
+            Self::Wall => leaf(None, InsertKind::Doors, Some(2), Some(2)),
+            Self::Tall => leaf(None, InsertKind::Doors, Some(2), Some(4)),
+        }
     }
 }
 
@@ -493,6 +588,36 @@ mod tests {
             ("878.4 mm", "878.4 mm")
         );
         assert_eq!(rows[12].edges, "4 edges");
+    }
+
+    #[test]
+    fn choosing_a_kind_gives_its_usual_sizes_and_front() {
+        let mut designer = Designer::default();
+        designer.set_kind(CabinetKind::Wall);
+        assert_eq!(designer.label(), "W1");
+        assert_eq!(designer.reading(Dimension::Height), "= 30\"");
+        assert_eq!(designer.reading(Dimension::Depth), "= 12\"");
+        let list = designer.cut_list();
+        assert_eq!(list.problems, Vec::<String>::new());
+        let names: Vec<&str> = list.rows.iter().map(|r| r.part.as_str()).collect();
+        assert!(
+            names.contains(&"Top") && names.contains(&"Shelf 2"),
+            "{names:?}"
+        );
+
+        designer.set_kind(CabinetKind::Tall);
+        assert_eq!(designer.label(), "T1");
+        assert_eq!(designer.reading(Dimension::Height), "= 84\"");
+        assert_eq!(
+            designer
+                .cut_list()
+                .rows
+                .iter()
+                .filter(|r| r.part.starts_with("Shelf"))
+                .count(),
+            4
+        );
+        assert!(designer.modified());
     }
 
     #[test]
