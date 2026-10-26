@@ -16,6 +16,7 @@ use std::rc::Rc;
 use i_slint_backend_testing::ElementHandle;
 use opencabinet_app::AppWindow;
 use opencabinet_app::dialogs::Dialogs;
+use slint::Model;
 
 /// Answers the dialogs from the test, and counts the questions.
 #[derive(Default)]
@@ -58,10 +59,27 @@ fn the_window_edits_saves_and_reopens_a_project() {
         1
     );
 
+    // The cut list shows the starter cabinet's nine parts.
+    let cell = |row: usize, column: usize| {
+        let row = window.get_cut_rows().row_data(row).unwrap();
+        row.row_data(column).unwrap().text.to_string()
+    };
+    assert_eq!(window.get_cut_rows().row_count(), 9);
+    assert_eq!(
+        (cell(2, 1), cell(2, 4)),
+        ("Bottom".into(), "28-19/32\"".into())
+    );
+    assert_eq!(
+        window.get_cut_problems(),
+        "B1, note: drawer boxes are not evaluated yet"
+    );
+
     // Shop notation is read exactly and shown back in lowest terms.
     field(&window, "Width").set_accessible_value("30 1/2");
     assert_eq!(window.get_width_reading(), "= 30-1/2\"");
     assert_eq!(window.get_width_error(), "");
+    // The cut list follows the new width at once.
+    assert_eq!(cell(2, 4), "29-3/32\"");
     assert_eq!(
         window.get_window_title(),
         "Untitled* — OpenCabinet Designer"

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 OpenCabinet contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { LineEdit, Palette } from "std-widgets.slint";
+import { LineEdit, Palette, StandardTableView } from "std-widgets.slint";
 
 // A length field: a label, the text as typed, and below it either the value
 // read back in the display precision or why it cannot be read.
@@ -50,6 +50,10 @@ export component AppWindow inherits Window {
     in property <string> depth-error;
     // The cabinet's front as a width-to-height ratio, for the preview.
     in property <float> front-ratio: 1;
+    // The cut list: one row of text cells per part, and what could not be
+    // evaluated.
+    in property <[[StandardListViewItem]]> cut-rows;
+    in property <string> cut-problems;
 
     callback width-edited(text: string);
     callback height-edited(text: string);
@@ -126,23 +130,50 @@ export component AppWindow inherits Window {
                 }
             }
 
-            // The drawing area. For now it shows the front's proportions;
-            // elevations arrive with the evaluator.
-            Rectangle {
+            VerticalLayout {
                 horizontal-stretch: 1;
-                background: Palette.alternate-background;
-                property <length> room-w: self.width - 64px;
-                property <length> room-h: self.height - 64px;
-                property <length> front-w: min(self.room-w, self.room-h * root.front-ratio);
-                property <length> front-h: self.front-w / root.front-ratio;
 
+                // The drawing area. For now it shows the front's proportions;
+                // elevations arrive with the drawings.
                 Rectangle {
-                    accessible-role: image;
-                    accessible-label: "Cabinet front";
-                    width: parent.front-w;
-                    height: parent.front-h;
-                    border-color: Palette.foreground;
-                    border-width: 1px;
+                    vertical-stretch: 1;
+                    background: Palette.alternate-background;
+                    property <length> room-w: self.width - 64px;
+                    property <length> room-h: self.height - 64px;
+                    property <length> front-w: min(self.room-w, self.room-h * root.front-ratio);
+                    property <length> front-h: self.front-w / root.front-ratio;
+
+                    Rectangle {
+                        accessible-role: image;
+                        accessible-label: "Cabinet front";
+                        width: parent.front-w;
+                        height: parent.front-h;
+                        border-color: Palette.foreground;
+                        border-width: 1px;
+                    }
+                }
+
+                VerticalLayout {
+                    padding: 8px;
+                    spacing: 4px;
+                    Text { text: "Cut list"; font-weight: 700; }
+                    if root.cut-problems != "": Text {
+                        text: root.cut-problems;
+                        color: #b26a00;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                    StandardTableView {
+                        accessible-label: "Cut list";
+                        height: 260px;
+                        columns: [
+                            { title: "Product" }, { title: "Part" }, { title: "Material" },
+                            { title: "Qty" }, { title: "Length" }, { title: "Width" },
+                            { title: "Thick." }, { title: "Cut length" }, { title: "Cut width" },
+                            { title: "Edges" },
+                        ];
+                        rows: root.cut-rows;
+                    }
                 }
             }
         }
