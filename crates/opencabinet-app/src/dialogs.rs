@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! The questions the window asks the user in the system's own dialogs:
-//! which file to open, where to save, and whether to discard changes.
+//! which file to open, where to save, which folder to export into, and
+//! whether to discard changes.
 //! Tests replace them with fixed answers.
 
 use std::path::PathBuf;
@@ -17,6 +18,10 @@ pub trait Dialogs {
     /// Where to save a file of `kind`, starting from `suggested_name`, or
     /// `None` when the user cancels.
     fn save_path(&self, suggested_name: &str, kind: FileKind) -> Option<PathBuf>;
+
+    /// The folder to export the parts' DXF files into, or `None` when the
+    /// user cancels.
+    fn dxf_folder(&self) -> Option<PathBuf>;
 
     /// Whether the user agrees to lose the changes that are not saved.
     fn discard_changes(&self) -> bool;
@@ -73,6 +78,12 @@ impl Dialogs for SystemDialogs {
         } else {
             path.with_extension(extension)
         })
+    }
+
+    fn dxf_folder(&self) -> Option<PathBuf> {
+        FileDialog::new()
+            .set_title("Export parts as DXF: choose a folder")
+            .pick_folder()
     }
 
     fn discard_changes(&self) -> bool {
