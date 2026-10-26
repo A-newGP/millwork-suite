@@ -29,4 +29,4 @@ Accepted ADRs are not edited; a new ADR supersedes them.
 | [0012](0012-desktop-ui-toolkit.md) | Desktop user interface toolkit | Accepted |
 | [0013](0013-gpl-or-later.md) | Keep "or later" in the GPL and AGPL licenses | Accepted |
 | [0014](0014-modest-hardware-budgets.md) | Performance budgets for modest computers | Accepted |
-| [0015](0015-export-libraries-and-font.md) | Libraries for PDF and DXF export, and a bundled font | Proposed |
+| [0015](0015-export-libraries-and-font.md) | Libraries for PDF and DXF export, and a bundled font | Accepted |

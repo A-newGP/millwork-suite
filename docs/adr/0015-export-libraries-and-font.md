@@ -5,7 +5,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # 0015 — Libraries for PDF and DXF export, and a bundled font
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-10-26
 - **Deciders:** Andrés (@A-newGP)
 
@@ -55,7 +55,7 @@ Every run took well under a tenth of a second.
 
 ## Decision outcome
 
-Proposed:
+Chosen:
 
 1. **PDF with krilla.** It embeds the subset of the font a document uses,
    so a drawing looks the same everywhere and any character can appear; it

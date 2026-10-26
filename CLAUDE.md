@@ -98,6 +98,10 @@ documentos de proceso (MAINTAINERS, CODEOWNERS, CHANGELOG con entradas, repo
 - Equipo modesto (ADR-0014): equipo de referencia de unos diez años (2
   núcleos, 4 GB, sin GPU, 1366 × 768) y presupuestos de rendimiento que la
   CI vigila desde la Fase 2.
+- Exportación (ADR-0015): PDF con **krilla**, DXF con el crate **`dxf`**
+  (DXF 2000+ en milímetros, auditado con ezdxf en la CI) y la fuente
+  **Noto Sans** (OFL-1.1) incluida como archivo aparte, no dentro del
+  ejecutable.
 
 ## Decisiones pendientes (no tomarlas por tu cuenta)
 
