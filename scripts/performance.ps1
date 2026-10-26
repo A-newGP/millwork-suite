@@ -61,7 +61,7 @@ function Measure-Start([string] $Exe) {
 function Measure-Edit([string] $Exe) {
     $output = & $Exe
     if ($LASTEXITCODE -ne 0) { throw "$Exe failed" }
-    [double] $output / 1000
+    [double] $output / 1e6
 }
 
 function Median([double[]] $Values) {

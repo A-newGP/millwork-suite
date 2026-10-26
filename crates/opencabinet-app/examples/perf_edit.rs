@@ -3,7 +3,7 @@
 
 //! Measures the response to an edit (ADR-0014): the time from typing a new
 //! width to the window's state being updated, without drawing it. Prints
-//! the median in microseconds over many edits.
+//! the median in nanoseconds over many edits.
 //!
 //! `cargo run --release -p opencabinet-app --example perf_edit`
 
@@ -22,6 +22,8 @@ fn main() {
             start.elapsed()
         })
         .collect();
+    // The edits really went through: the last one is the one shown.
+    assert_eq!(window.get_width_reading(), "= 30-1/2\"");
     times.sort();
-    println!("{}", times[EDITS / 2].as_micros());
+    println!("{}", times[EDITS / 2].as_nanos());
 }
