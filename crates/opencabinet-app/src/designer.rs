@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use opencabinet_format::Document;
 use opencabinet_model::validate::{Issue, validate};
 use opencabinet_model::{
-    FrontNode, FrontStyle, Grain, Id, Insert, InsertKind, Length, Library, Method, Product,
-    Project, Settings, SheetMaterial, Size, SplitDirection, Standard, Units,
+    EdgeBand, FrontNode, FrontStyle, Grain, Id, Insert, InsertKind, Length, Library, Method,
+    Product, Project, Settings, SheetMaterial, Size, SplitDirection, Standard, Units,
 };
 
 use crate::NAME_AND_VERSION;
@@ -235,29 +235,90 @@ fn usual_precision(units: Units) -> Length {
     }
 }
 
-/// A project with one material, one frameless standard and one base
-/// cabinet: a drawer over a pair of doors.
+/// A project with the materials, edge band and frameless standard a base
+/// cabinet needs, and one base cabinet: a drawer over a pair of doors.
 fn new_document(units: Units) -> Document {
-    let material = SheetMaterial {
+    let library = starter_library();
+    let product = base_cabinet(&library);
+    let project = Project {
+        id: Id::new(),
+        name: "Untitled".into(),
+        notes: String::new(),
+        settings: Settings {
+            units,
+            precision: usual_precision(units),
+            default_standard: library.standards[0].id,
+            unknown: BTreeMap::default(),
+        },
+        rooms: Vec::new(),
+        products: vec![product],
+        revisions: Vec::new(),
+        extensions: BTreeMap::default(),
+        unknown: BTreeMap::default(),
+    };
+    let mut document = Document::new(project, library);
+    document.generator = NAME_AND_VERSION.into();
+    document
+}
+
+fn inches(numerator: i64, denominator: i64) -> Length {
+    Length::from_inch_fraction(numerator, denominator).expect("a valid fraction")
+}
+
+/// 3/4" plywood for the case and fronts, 1/4" plywood for the back, a
+/// 0.5 mm edge band and a frameless standard, in that order.
+fn starter_library() -> Library {
+    let sheet = |name: &str, nominal: Length, actual: Length| SheetMaterial {
         id: Id::new(),
         version: 1,
-        name: "Plywood 3/4\"".into(),
-        nominal_thickness: Length::from_inch_fraction(3, 4).expect("a valid fraction"),
-        actual_thickness: Length::from_mm(18),
+        name: name.into(),
+        nominal_thickness: nominal,
+        actual_thickness: actual,
         length: Length::from_inches(97),
         width: Length::from_inches(49),
         grain: Grain::Length,
         unknown: BTreeMap::default(),
     };
-    let standard = Standard {
-        id: Id::new(),
-        version: 1,
-        name: "Frameless".into(),
-        derived_from: None,
-        method: Method::Frameless,
-        rules: BTreeMap::default(),
+    let rules = serde_json::json!({
+        "back": { "construction": "grooved", "grooveDepth": inches(3, 8) },
+        "case": { "stretcherWidth": Length::from_inches(4) },
+        "fronts": { "overlay": "full", "gap": inches(1, 8) },
+        "toeKick": { "height": Length::from_inches(4) },
+    });
+    Library {
+        materials: vec![
+            sheet("Plywood 3/4\"", inches(3, 4), Length::from_mm(18)),
+            sheet("Plywood 1/4\"", inches(1, 4), Length::from_mm(6)),
+        ],
+        edge_bands: vec![EdgeBand {
+            id: Id::new(),
+            version: 1,
+            name: "Edge band 0.5 mm".into(),
+            thickness: Length::from_nm(500_000),
+            width: Length::from_mm(22),
+            unknown: BTreeMap::default(),
+        }],
+        standards: vec![Standard {
+            id: Id::new(),
+            version: 1,
+            name: "Frameless".into(),
+            derived_from: None,
+            method: Method::Frameless,
+            rules: serde_json::from_value(rules).expect("rules are a JSON object"),
+            unknown: BTreeMap::default(),
+        }],
+        hardware: Vec::new(),
         unknown: BTreeMap::default(),
-    };
+    }
+}
+
+/// A 30" × 34-1/2" × 24" base cabinet from the starter library.
+fn base_cabinet(library: &Library) -> Product {
+    let (plywood, back, band) = (
+        library.materials[0].id,
+        library.materials[1].id,
+        library.edge_bands[0].id,
+    );
     let leaf = |size, kind, count| FrontNode {
         id: Id::new(),
         size: Some(size),
@@ -274,17 +335,26 @@ fn new_document(units: Units) -> Document {
         }),
         unknown: BTreeMap::default(),
     };
-    let product = Product {
+    Product {
         id: Id::new(),
         label: "B1".into(),
         product_type: "base-cabinet@1".into(),
-        standard: standard.id,
+        standard: library.standards[0].id,
         width: Length::from_inches(30),
-        height: Length::from_inch_fraction(69, 2).expect("a valid fraction"),
+        height: inches(69, 2),
         depth: Length::from_inches(24),
         quantity: None,
         parameters: BTreeMap::default(),
-        materials: [("case".to_owned(), material.id)].into(),
+        materials: [
+            ("case", plywood),
+            ("back", back),
+            ("doors", plywood),
+            ("edgeBandCase", band),
+            ("edgeBandFronts", band),
+        ]
+        .into_iter()
+        .map(|(role, id)| (role.to_owned(), id))
+        .collect(),
         front: Some(FrontNode {
             id: Id::new(),
             size: None,
@@ -303,31 +373,7 @@ fn new_document(units: Units) -> Document {
         overrides: Vec::new(),
         extensions: BTreeMap::default(),
         unknown: BTreeMap::default(),
-    };
-    let project = Project {
-        id: Id::new(),
-        name: "Untitled".into(),
-        notes: String::new(),
-        settings: Settings {
-            units,
-            precision: usual_precision(units),
-            default_standard: standard.id,
-            unknown: BTreeMap::default(),
-        },
-        rooms: Vec::new(),
-        products: vec![product],
-        revisions: Vec::new(),
-        extensions: BTreeMap::default(),
-        unknown: BTreeMap::default(),
-    };
-    let library = Library {
-        materials: vec![material],
-        standards: vec![standard],
-        ..Library::default()
-    };
-    let mut document = Document::new(project, library);
-    document.generator = NAME_AND_VERSION.into();
-    document
+    }
 }
 
 fn capitalize(text: &str) -> String {
@@ -355,6 +401,19 @@ mod tests {
         assert!(!designer.modified());
         assert_eq!(designer.title(), "Untitled — OpenCabinet Designer");
         assert_eq!(designer.label(), "B1");
+    }
+
+    #[test]
+    fn a_new_project_can_be_evaluated() {
+        let designer = Designer::default();
+        let document = &designer.document;
+        let evaluation = opencabinet_eval::evaluate(&document.project, &document.library);
+        assert!(
+            evaluation.problems.iter().all(|p| !p.blocking),
+            "{:?}",
+            evaluation.problems
+        );
+        assert_eq!(evaluation.parts.len(), 9);
     }
 
     #[test]

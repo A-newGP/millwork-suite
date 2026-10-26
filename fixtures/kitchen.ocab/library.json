@@ -69,6 +69,13 @@
       "name": "Shop frameless, 32 mm",
       "method": "frameless",
       "rules": {
+        "back": {
+          "construction": "grooved",
+          "grooveDepth": 9525000
+        },
+        "case": {
+          "stretcherWidth": 101600000
+        },
         "fronts": {
           "gap": 3175000,
           "overlay": "full"
