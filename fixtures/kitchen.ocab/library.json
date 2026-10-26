@@ -81,13 +81,15 @@
       "rules": {
         "back": {
           "construction": "grooved",
-          "grooveDepth": 9525000
+          "grooveDepth": 9525000,
+          "setback": 6350000
         },
         "case": {
           "stretcherWidth": 101600000
         },
         "drawers": {
           "bottomGrooveDepth": 6350000,
+          "bottomGrooveSetback": 12700000,
           "rearClearance": 25400000,
           "sideClearance": 12700000,
           "slideLengths": [
@@ -111,13 +113,36 @@
           "gap": 3175000,
           "overlay": "full"
         },
+        "hinges": {
+          "boringDistance": 4000000,
+          "counts": [
+            {
+              "count": 2,
+              "upTo": 1016000000
+            },
+            {
+              "count": 3,
+              "upTo": 1524000000
+            },
+            {
+              "count": 4,
+              "upTo": 2032000000
+            }
+          ],
+          "endDistance": 76200000,
+          "hardware": "0199f8a0-0000-7000-8000-000000000121"
+        },
         "shelves": {
           "backAllowance": 19050000,
           "frontSetback": 6350000,
           "sideClearance": 1587500
         },
         "systemHoles": {
-          "firstHole": 37000000,
+          "depth": 12000000,
+          "diameter": 5000000,
+          "endClearance": 50800000,
+          "frontSetback": 37000000,
+          "rearSetback": 37000000,
           "spacing": 32000000
         },
         "toeKick": {
@@ -135,13 +160,15 @@
       "rules": {
         "back": {
           "construction": "grooved",
-          "grooveDepth": 9525000
+          "grooveDepth": 9525000,
+          "setback": 6350000
         },
         "case": {
           "stretcherWidth": 101600000
         },
         "drawers": {
           "bottomGrooveDepth": 6350000,
+          "bottomGrooveSetback": 12700000,
           "rearClearance": 25400000,
           "sideClearance": 12700000,
           "slideLengths": [
@@ -171,13 +198,36 @@
           "overlay": "partial",
           "overlayAmount": 12700000
         },
+        "hinges": {
+          "boringDistance": 4000000,
+          "counts": [
+            {
+              "count": 2,
+              "upTo": 1016000000
+            },
+            {
+              "count": 3,
+              "upTo": 1524000000
+            },
+            {
+              "count": 4,
+              "upTo": 2032000000
+            }
+          ],
+          "endDistance": 76200000,
+          "hardware": "0199f8a0-0000-7000-8000-000000000121"
+        },
         "shelves": {
           "backAllowance": 19050000,
           "frontSetback": 6350000,
           "sideClearance": 1587500
         },
         "systemHoles": {
-          "firstHole": 37000000,
+          "depth": 12000000,
+          "diameter": 5000000,
+          "endClearance": 50800000,
+          "frontSetback": 37000000,
+          "rearSetback": 37000000,
           "spacing": 32000000
         },
         "toeKick": {

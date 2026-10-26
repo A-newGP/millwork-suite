@@ -86,22 +86,58 @@
 //! The cut size of a part is its finished size less the thickness of the
 //! bands on its ends (length) and sides (width).
 //!
+//! # Machining
+//!
+//! Each part carries its [`Operation`]s in its own coordinates: `x` along
+//! its length from the `x0` end, `y` across its width from the `y0` edge,
+//! on face `A` (toward the inside of the cabinet) or `B`. Sides run `x` up
+//! from their bottom end and `y` forward from their rear edge; bottoms,
+//! tops and shelves run `x` left to right and `y` forward; doors run `x` up
+//! and `y` from their left edge as seen from the front; drawer box parts
+//! run `y` up from their bottom edge.
+//!
+//! - **Back groove** (the `back` rules' `setback` `e`): as wide as the
+//!   back is thick, `b`, centered `e + b/2` from the rear edge, the full
+//!   length of the sides, the bottom and any top.
+//! - **Line boring** (the `systemHoles` rules): in both sides, for each
+//!   opening with shelves, a front column `f` from the case's front edge
+//!   and a rear one `r` in front of the back, on a grid every `p` from the
+//!   top of the bottom, clear of the opening's ends by `c`. Shelves must
+//!   stop short of the back.
+//! - **Hinges** (the `hinges` rules and the hinge's `cupDiameter` and
+//!   `cupDepth`): as many as the table gives for the door's height, the
+//!   first and last `e` from its ends and the rest evenly between, their
+//!   cups' edge `k` from the hinge edge, in the door or its hinge stile. A
+//!   pair hinges on its outer edges; a single door on its `hingeSide`. In
+//!   a frameless cabinet, two holes on the front column of the side, `p`
+//!   apart around each cup, take the hinge's plate; face frame hinges screw
+//!   to the frame.
+//! - **Drawer bottom groove** (the `drawers` rules'
+//!   `bottomGrooveSetback`): as wide as the bottom is thick, the full
+//!   length of the box's sides, front and back.
+//!
+//! Without a rule that only places machining, the parts are still given
+//! and the evaluator notes what it could not machine.
+//!
 //! Anything else, such as other product types, other face frame joinery
-//! and overrides,
-//! makes the product an error rather than giving parts that would be wrong.
+//! and overrides, makes the product an error rather than giving parts that
+//! would be wrong.
 
 pub mod front;
+pub mod machining;
 pub mod rules;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 
 use opencabinet_model::{
-    EdgeBand, FrontStyle, Id, InsertKind, Length, Library, Method, Product, Project, SheetMaterial,
-    SplitDirection,
+    EdgeBand, FrontStyle, Hardware, Id, InsertKind, Length, Library, Method, Product, Project,
+    SheetMaterial, Side, SplitDirection,
 };
 
 use crate::front::{Divider, Dividers, Layout, Opening, Rect, lay_out};
+pub use crate::machining::{Face, Operation, Point};
+use crate::machining::{groove_along, hinge_positions, holes_between};
 use crate::rules::{Back, FaceFrame, Fronts, Overlay, Rules};
 
 /// The four edges of a part: `x0` and `x1` are the ends of its length,
@@ -136,6 +172,8 @@ pub struct Part {
     pub edges: Edges,
     /// How many of this part the job needs.
     pub quantity: u32,
+    /// What is machined into it, in its own coordinates.
+    pub operations: Vec<Operation>,
 }
 
 /// Something about a product that the user should know.
@@ -278,6 +316,7 @@ pub fn evaluate_product(
         bottom_raise,
     };
     let mut parts = case_parts(kind, size, &rules, &maker, (case, back), front_edge);
+    let back_front = back_front(&rules.back, back, &lookup);
 
     let face = Rect {
         x: Length::ZERO,
@@ -290,21 +329,52 @@ pub fn evaluate_product(
         fit.check_frame(frame, &layout.dividers)?;
         parts.extend(frame_parts(frame, material, face, &layout.dividers, &maker));
     }
-    let cabinet = Cabinet {
+    let mut cabinet = Cabinet {
         lookup: &lookup,
         maker: &maker,
         rules: &rules,
         fit,
+        face,
         inner_width,
         depth: case_depth,
+        // From the top of the bottom to the underside of the top or the
+        // stretchers, up the sides.
+        inside: (t + bottom_raise, box_height - t),
+        back_front,
+        sides: [Vec::new(), Vec::new()],
     };
     for opening in &layout.openings {
         cabinet.insert(opening, &mut parts)?;
+    }
+    let [left, right] = cabinet.sides;
+    for (key, operations) in [("case/side.left", left), ("case/side.right", right)] {
+        if let Some(side) = parts.iter_mut().find(|p| p.key == key) {
+            side.operations.extend(operations);
+        }
     }
     Ok(Evaluated {
         parts,
         notes: lookup.notes.into_inner(),
     })
+}
+
+/// How far the back reaches into the case from its rear edge, when the
+/// standard says.
+fn back_front(back: &Back, material: &SheetMaterial, lookup: &Lookup<'_>) -> Option<Length> {
+    match *back {
+        Back::Grooved {
+            setback: Some(setback),
+            ..
+        } => Some(setback + material.actual_thickness),
+        Back::Grooved { setback: None, .. } => {
+            lookup.note(
+                "the back's groove is not machined: the standard's `back` rules have no \
+                 `setback`",
+            );
+            None
+        }
+        Back::Applied => Some(Length::ZERO),
+    }
 }
 
 /// The face frame rules of a standard built by `method`, which has none
@@ -609,7 +679,7 @@ fn case_parts(
         }
     };
     let (back_length, back_width) = match rules.back {
-        Back::Grooved { groove_depth } => (
+        Back::Grooved { groove_depth, .. } => (
             box_height - (t - groove_depth) * grooved_ends - bottom_raise,
             inner_width + groove_depth * 2,
         ),
@@ -617,6 +687,22 @@ fn case_parts(
     };
     parts.push(maker.part("case/back", "back", back, back_length, back_width, BARE));
 
+    // The back's groove runs the full length of the sides, the bottom and
+    // any top.
+    if let Back::Grooved {
+        groove_depth,
+        setback: Some(setback),
+    } = rules.back
+    {
+        let width = back.actual_thickness;
+        let y = setback + width.div_round(2);
+        for part in &mut parts {
+            if matches!(part.role, "side" | "bottom" | "top") {
+                let groove = groove_along(part.length, y, width, groove_depth);
+                part.operations.push(groove);
+            }
+        }
+    }
     parts
 }
 
@@ -648,10 +734,18 @@ struct Cabinet<'c, 'p> {
     maker: &'c PartMaker<'p>,
     rules: &'c Rules,
     fit: Fit,
+    /// The front of the box, from the floor: where the sides stand.
+    face: Rect,
     /// Between the sides.
     inner_width: Length,
     /// Of the case, behind any face frame.
     depth: Length,
+    /// The inside of the case up the sides, from their bottom end.
+    inside: (Length, Length),
+    /// How far the back reaches in from the rear edge, when known.
+    back_front: Option<Length>,
+    /// What the inserts machine into the left and right sides.
+    sides: [Vec<Operation>; 2],
 }
 
 impl<'p> Cabinet<'_, 'p> {
@@ -661,7 +755,7 @@ impl<'p> Cabinet<'_, 'p> {
     }
 
     /// The parts an opening's insert produces.
-    fn insert(&self, opening: &Opening<'_>, parts: &mut Vec<Part>) -> Result<(), String> {
+    fn insert(&mut self, opening: &Opening<'_>, parts: &mut Vec<Part>) -> Result<(), String> {
         let insert = opening.insert;
         if let Some(FrontStyle::Other(style)) = &insert.style {
             return Err(format!("unknown front style `{style}`"));
@@ -678,6 +772,15 @@ impl<'p> Cabinet<'_, 'p> {
                 let doors = self.fit.fronts(opening.rect, count)?;
                 for (i, door) in doors.into_iter().enumerate() {
                     let key = format!("{prefix}/door.{}", i + 1);
+                    // A pair hinges on its outer edges.
+                    let side = match (count, i) {
+                        (2, 0) => Side::Left,
+                        (2, _) => Side::Right,
+                        _ => insert
+                            .hinge_side
+                            .ok_or("a single door needs a hinge side")?,
+                    };
+                    let first = parts.len();
                     if five_piece {
                         self.five_piece(&key, door, parts)?;
                     } else {
@@ -693,8 +796,15 @@ impl<'p> Cabinet<'_, 'p> {
                         );
                         parts.push(part);
                     }
+                    // The cups go in the door, or in the stile on its
+                    // hinge side.
+                    let target = match side {
+                        Side::Right if five_piece => first + 1,
+                        _ => first,
+                    };
+                    self.hinges(opening, door, side, &mut parts[target])?;
                 }
-                self.shelves(&prefix, insert.shelves, parts)?;
+                self.shelves(&prefix, insert.shelves, opening.rect, parts)?;
             }
             InsertKind::Drawer | InsertKind::FalseFront => {
                 let material = self.lookup.material_or("drawerFronts", "doors")?;
@@ -718,7 +828,7 @@ impl<'p> Cabinet<'_, 'p> {
                     self.drawer_box(&prefix, opening.rect, parts)?;
                 }
             }
-            InsertKind::Open => self.shelves(&prefix, insert.shelves, parts)?,
+            InsertKind::Open => self.shelves(&prefix, insert.shelves, opening.rect, parts)?,
             InsertKind::Appliance | InsertKind::None => {}
             InsertKind::Other(kind) => {
                 return Err(format!(
@@ -727,6 +837,146 @@ impl<'p> Cabinet<'_, 'p> {
             }
         }
         Ok(())
+    }
+
+    /// Bores the cups of the hinges of `door` into `part`, the door or its
+    /// stile on the hinge side, and in a frameless cabinet the holes for
+    /// the hinges' plates into the side they mount on.
+    fn hinges(
+        &mut self,
+        opening: &Opening<'_>,
+        door: Rect,
+        side: Side,
+        part: &mut Part,
+    ) -> Result<(), String> {
+        let Some(rules) = &self.rules.hinges else {
+            self.lookup
+                .note("doors are not bored for hinges: the standard has no `hinges` rules");
+            return Ok(());
+        };
+        let hinge = self.lookup.hardware(rules.hardware)?;
+        let dimension = |name: &str| {
+            hinge
+                .dimensions
+                .get(name)
+                .copied()
+                .ok_or_else(|| format!("the hinge `{}` has no `{name}`", hinge.name))
+        };
+        let (diameter, depth) = (dimension("cupDiameter")?, dimension("cupDepth")?);
+        let count = rules
+            .counts
+            .iter()
+            .find(|c| door.height <= c.up_to)
+            .ok_or("the door is taller than any in the standard's hinge table")?
+            .count;
+        if count < 2 {
+            return Err("the standard's hinge table gives a door fewer than two hinges".into());
+        }
+        if door.height <= rules.end_distance * 2 {
+            return Err("the door is too short for its hinges".into());
+        }
+        if rules.boring_distance + diameter > part.width || depth >= part.thickness {
+            return Err("the hinge cups do not fit in the door".into());
+        }
+        // The cup's center, from the hinge edge.
+        let from_edge = rules.boring_distance + diameter.div_round(2);
+        let y = match side {
+            Side::Left => from_edge,
+            Side::Right => part.width - from_edge,
+        };
+        let positions = hinge_positions(door.height, rules.end_distance, count);
+        for &x in &positions {
+            part.operations.push(Operation::Hole {
+                face: Face::A,
+                at: Point { x, y },
+                diameter,
+                depth,
+            });
+        }
+        if matches!(self.fit, Fit::Framed { .. }) {
+            // Face frame hinges screw to the frame.
+            return Ok(());
+        }
+        let (on_side, index) = match side {
+            Side::Left => (opening.rect.x == self.face.x, 0),
+            Side::Right => (
+                opening.rect.x + opening.rect.width == self.face.x + self.face.width,
+                1,
+            ),
+        };
+        if !on_side {
+            return Err(
+                "a door hinged away from the cabinet's sides has nothing to mount its \
+                 hinges on"
+                    .into(),
+            );
+        }
+        let Some(holes) = &self.rules.system_holes else {
+            self.lookup.note(
+                "the sides are not bored for hinge plates: the standard has no \
+                 `systemHoles` rules",
+            );
+            return Ok(());
+        };
+        // Two holes on the front column, a spacing apart, centered on each
+        // cup.
+        let y = self.depth - holes.front_setback;
+        let half = holes.spacing.div_round(2);
+        for x in positions {
+            let x = door.y - self.face.y + x;
+            for at in [x - half, x - half + holes.spacing] {
+                self.sides[index].push(Operation::Hole {
+                    face: Face::A,
+                    at: Point { x: at, y },
+                    diameter: holes.diameter,
+                    depth: holes.depth,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Bores both sides for shelf pins across `opening`: a front and a rear
+    /// column on the 32 mm grid that starts at the top of the bottom,
+    /// clear of the opening's ends.
+    fn line_boring(&mut self, opening: Rect) {
+        let Some(holes) = &self.rules.system_holes else {
+            self.lookup.note(
+                "the sides are not bored for shelf pins: the standard has no \
+                 `systemHoles` rules",
+            );
+            return;
+        };
+        let Some(back_front) = self.back_front else {
+            // Already noted: without the back's setback the rear column
+            // has no place.
+            return;
+        };
+        let (bottom, top) = self.inside;
+        let low = (opening.y - self.face.y).max(bottom) + holes.end_clearance;
+        let high = (opening.y + opening.height - self.face.y).min(top) - holes.end_clearance;
+        let Some((first, count)) = holes_between(bottom, holes.spacing, low, high) else {
+            return;
+        };
+        for y in [
+            self.depth - holes.front_setback,
+            back_front + holes.rear_setback,
+        ] {
+            let column = Operation::HolePattern {
+                face: Face::A,
+                start: Point { x: first, y },
+                step: Point {
+                    x: holes.spacing,
+                    y: Length::ZERO,
+                },
+                count,
+                diameter: holes.diameter,
+                depth: holes.depth,
+            };
+            for side in &mut self.sides {
+                side.push(column.clone());
+            }
+        }
     }
 
     /// A five-piece front the size of `front`: two stiles the full height,
@@ -825,9 +1075,31 @@ impl<'p> Cabinet<'_, 'p> {
             return Err("the drawer opening is too small for a drawer box".into());
         }
         let g = rules.bottom_groove_depth;
+        // The bottom's groove runs the full length of the sides, the front
+        // and the back.
+        let groove = if let Some(setback) = rules.bottom_groove_setback {
+            let width = bottom.actual_thickness;
+            if setback + width >= height {
+                return Err("the drawer box is too low for its bottom's groove".into());
+            }
+            Some((setback + width.div_round(2), width))
+        } else {
+            self.lookup.note(
+                "drawer bottoms' grooves are not machined: the standard's `drawers` \
+                     rules have no `bottomGrooveSetback`",
+            );
+            None
+        };
         let part = |name: &str, role, material, length, width| {
             let key = format!("{prefix}/drawer/box.{name}");
-            self.maker.part(&key, role, material, length, width, BARE)
+            let mut part = self.maker.part(&key, role, material, length, width, BARE);
+            if let (Some((y, groove_width)), "drawerSide" | "drawerSubFront" | "drawerBack") =
+                (groove, role)
+            {
+                part.operations
+                    .push(groove_along(length, y, groove_width, g));
+            }
+            part
         };
         parts.extend([
             part("side.left", "drawerSide", sides, depth, height),
@@ -845,11 +1117,13 @@ impl<'p> Cabinet<'_, 'p> {
         Ok(())
     }
 
-    /// `count` adjustable shelves across the cabinet's inside.
+    /// `count` adjustable shelves across the cabinet's inside, in
+    /// `opening`, and the line boring for their pins.
     fn shelves(
-        &self,
+        &mut self,
         prefix: &str,
         count: Option<u8>,
+        opening: Rect,
         parts: &mut Vec<Part>,
     ) -> Result<(), String> {
         let count = count.unwrap_or(0);
@@ -868,6 +1142,17 @@ impl<'p> Cabinet<'_, 'p> {
         if length <= Length::ZERO || width <= Length::ZERO {
             return Err("the cabinet is too small for its shelves".into());
         }
+        if self
+            .back_front
+            .is_some_and(|back| rules.back_allowance < back)
+        {
+            return Err(
+                "the shelves reach into the back: their back allowance is less \
+                 than the back's setback and thickness"
+                    .into(),
+            );
+        }
+        self.line_boring(opening);
         for i in 1..=count {
             let key = format!("{prefix}/shelf.{i}");
             let part = self
@@ -898,6 +1183,14 @@ impl<'p> Lookup<'p> {
             .iter()
             .find(|m| m.id == *id)
             .ok_or_else(|| format!("the material for `{role}` is not in the library"))
+    }
+
+    fn hardware(&self, id: Id) -> Result<&'p Hardware, String> {
+        self.library
+            .hardware
+            .iter()
+            .find(|h| h.id == id)
+            .ok_or_else(|| "the standard's hinge is not in the library".into())
     }
 
     /// The material for `role`, or for `fallback` when `role` has none.
@@ -977,6 +1270,7 @@ impl PartMaker<'_> {
             cut_width: width - thickness(2) - thickness(3),
             edges: bands.map(|b| b.map(|b| b.id)),
             quantity: self.quantity,
+            operations: Vec::new(),
         }
     }
 }
