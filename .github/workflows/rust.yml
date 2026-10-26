@@ -82,6 +82,14 @@ jobs:
             grep -qF "$expected" <<< "$text" || { echo "missing: $expected"; exit 1; }
           done
           pdffonts cut-list.pdf
+      # The parts as DXF, audited by ezdxf (ADR-0015).
+      - name: Check the DXF files with ezdxf
+        if: runner.os == 'Linux'
+        run: |
+          cargo run --locked -q -p opencabinet-reports --example parts_dxf -- parts-dxf
+          python3 -m venv "$RUNNER_TEMP/ezdxf"
+          "$RUNNER_TEMP/ezdxf/bin/pip" install --quiet ezdxf==1.4.5
+          "$RUNNER_TEMP/ezdxf/bin/python" -I scripts/check-dxf.py parts-dxf
 
   dependencies:
     name: Dependencies (cargo-deny)

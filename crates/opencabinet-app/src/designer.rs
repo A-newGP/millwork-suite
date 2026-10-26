@@ -14,7 +14,9 @@ use opencabinet_model::{
     EdgeBand, FrontNode, FrontStyle, Grain, Hardware, Id, Insert, InsertKind, Length, Library,
     Method, Product, Project, Settings, SheetMaterial, Size, SplitDirection, Standard, Units,
 };
-use opencabinet_reports::{CutList, Fonts, Paper, Separator, cut_list, cut_list_pdf, to_csv};
+use opencabinet_reports::{
+    CutList, Fonts, Paper, Separator, cut_list, cut_list_pdf, parts_dxf, to_csv,
+};
 
 use crate::NAME_AND_VERSION;
 
@@ -297,6 +299,22 @@ impl Designer {
         let paper = Paper::for_units(self.units());
         let pdf = cut_list_pdf(&self.cut_list(), title, NAME_AND_VERSION, paper, fonts)?;
         std::fs::write(path, pdf).map_err(|e| format!("Cannot export the cut list: {e}"))
+    }
+
+    /// Writes a DXF of every part, and one with all of them, into
+    /// `folder`, replacing files of the same name; gives how many parts.
+    ///
+    /// # Errors
+    /// A message for the user when a file cannot be written.
+    pub fn export_parts_dxf(&self, folder: &Path) -> Result<usize, String> {
+        let document = &self.document;
+        let files = parts_dxf(&document.project, &document.library)?;
+        let fail = |e: std::io::Error| format!("Cannot export the parts as DXF: {e}");
+        std::fs::create_dir_all(folder).map_err(fail)?;
+        for file in &files {
+            std::fs::write(folder.join(&file.name), &file.contents).map_err(fail)?;
+        }
+        Ok(files.len() - 1)
     }
 
     /// Width over height, for drawing the front in proportion.

@@ -98,6 +98,8 @@ pub fn create_with(dialogs: Rc<dyn Dialogs>) -> Result<AppWindow, slint::Platfor
     let handle = Rc::clone(&app);
     window.on_export_cut_list_pdf(move || handle.export_cut_list_pdf());
     let handle = Rc::clone(&app);
+    window.on_export_parts_dxf(move || handle.export_parts_dxf());
+    let handle = Rc::clone(&app);
     window.on_about(move || {
         handle.status(&format!(
             "{NAME_AND_VERSION} — free software under the GNU GPL, version 3 or later"
@@ -259,6 +261,19 @@ impl App {
         };
         match self.designer.borrow().export_cut_list_pdf(&path, &fonts) {
             Ok(()) => self.status(&format!("Exported the cut list to {}", file_name(&path))),
+            Err(message) => self.status(&message),
+        }
+    }
+
+    fn export_parts_dxf(&self) {
+        let Some(folder) = self.dialogs.dxf_folder() else {
+            return;
+        };
+        match self.designer.borrow().export_parts_dxf(&folder) {
+            Ok(parts) => self.status(&format!(
+                "Exported {parts} parts as DXF to {}",
+                file_name(&folder)
+            )),
             Err(message) => self.status(&message),
         }
     }

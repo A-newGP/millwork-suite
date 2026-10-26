@@ -73,6 +73,7 @@ export component AppWindow inherits Window {
     // `true` for semicolons between fields, as Excel in Spanish expects.
     callback export-cut-list(semicolon: bool);
     callback export-cut-list-pdf();
+    callback export-parts-dxf();
     callback about();
     callback quit();
 
@@ -98,6 +99,10 @@ export component AppWindow inherits Window {
                     title: "CSV with semicolons, for Excel in Spanish…";
                     activated => { root.export-cut-list(true); }
                 }
+            }
+            MenuItem {
+                title: "Export parts as DXF…";
+                activated => { root.export-parts-dxf(); }
             }
             MenuSeparator { }
             MenuItem { title: "Quit"; activated => { root.quit(); } }

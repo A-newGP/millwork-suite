@@ -43,6 +43,10 @@ impl Dialogs for Answers {
             .map(|p| p.with_extension(extension))
     }
 
+    fn dxf_folder(&self) -> Option<PathBuf> {
+        self.path.borrow().as_ref().map(|p| p.with_extension("dxf"))
+    }
+
     fn discard_changes(&self) -> bool {
         self.asked_to_discard.set(self.asked_to_discard.get() + 1);
         self.discard.get()
@@ -150,6 +154,16 @@ fn the_window_edits_saves_and_reopens_a_project() {
     assert_eq!(
         window.get_status(),
         "Exported the cut list to test-cabinet.pdf"
+    );
+
+    // And every part as DXF, into a folder.
+    window.invoke_export_parts_dxf();
+    let folder = path.with_extension("dxf");
+    assert!(folder.join("B1 - Left side.dxf").is_file());
+    assert!(folder.join("all-parts.dxf").is_file());
+    assert_eq!(
+        window.get_status(),
+        "Exported 14 parts as DXF to test-cabinet.dxf"
     );
 
     // Five-piece fronts replace the slab ones in the cut list.
