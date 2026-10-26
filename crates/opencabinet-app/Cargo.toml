@@ -16,8 +16,8 @@ name = "opencabinet"
 path = "src/main.rs"
 
 [dependencies]
-opencabinet-eval = { workspace = true }
 opencabinet-model = { workspace = true }
+opencabinet-reports = { workspace = true }
 opencabinet-format = { workspace = true }
 rfd = "0.17.2"
 serde_json = { workspace = true }

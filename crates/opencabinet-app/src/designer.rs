@@ -14,9 +14,9 @@ use opencabinet_model::{
     EdgeBand, FrontNode, FrontStyle, Grain, Id, Insert, InsertKind, Length, Library, Method,
     Product, Project, Settings, SheetMaterial, Size, SplitDirection, Standard, Units,
 };
+use opencabinet_reports::{CutList, Separator, cut_list, to_csv};
 
 use crate::NAME_AND_VERSION;
-use crate::cut_list::{CutList, cut_list};
 
 /// One of the cabinet's overall dimensions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -210,6 +210,15 @@ impl Designer {
             self.units(),
             self.precision(),
         )
+    }
+
+    /// Writes the cut list as CSV, with `separator` between fields.
+    ///
+    /// # Errors
+    /// A message for the user when the file cannot be written.
+    pub fn export_cut_list(&self, path: &Path, separator: Separator) -> Result<(), String> {
+        std::fs::write(path, to_csv(&self.cut_list(), separator))
+            .map_err(|e| format!("Cannot export the cut list: {e}"))
     }
 
     /// Width over height, for drawing the front in proportion.

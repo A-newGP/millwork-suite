@@ -3146,9 +3146,9 @@ name = "opencabinet-app"
 version = "0.0.0"
 dependencies = [
  "i-slint-backend-testing",
- "opencabinet-eval",
  "opencabinet-format",
  "opencabinet-model",
+ "opencabinet-reports",
  "rfd",
  "serde_json",
  "slint",
@@ -3181,6 +3181,14 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
+]
+
+[[package]]
+name = "opencabinet-reports"
+version = "0.0.0"
+dependencies = [
+ "opencabinet-eval",
+ "opencabinet-model",
 ]
 
 [[package]]
