@@ -28,7 +28,8 @@ component LengthField inherits VerticalLayout {
 }
 
 export component AppWindow inherits Window {
-    title: "OpenCabinet Designer";
+    in property <string> window-title: "OpenCabinet Designer";
+    title: root.window-title;
     // Usable on the 1366 × 768 screen of the reference computer (ADR-0014).
     preferred-width: 1280px;
     preferred-height: 720px;
@@ -36,6 +37,7 @@ export component AppWindow inherits Window {
     min-height: 600px;
 
     in property <bool> metric;
+    in property <string> cabinet-label: "Cabinet";
     in property <string> status;
     in-out property <string> width-text;
     in-out property <string> height-text;
@@ -54,6 +56,9 @@ export component AppWindow inherits Window {
     callback depth-edited(text: string);
     callback units-chosen(metric: bool);
     callback new-project();
+    callback open-project();
+    callback save-project();
+    callback save-project-as();
     callback about();
     callback quit();
 
@@ -61,8 +66,9 @@ export component AppWindow inherits Window {
         Menu {
             title: "File";
             MenuItem { title: "New project"; activated => { root.new-project(); } }
-            MenuItem { title: "Open…"; enabled: false; }
-            MenuItem { title: "Save"; enabled: false; }
+            MenuItem { title: "Open…"; activated => { root.open-project(); } }
+            MenuItem { title: "Save"; activated => { root.save-project(); } }
+            MenuItem { title: "Save as…"; activated => { root.save-project-as(); } }
             MenuSeparator { }
             MenuItem { title: "Quit"; activated => { root.quit(); } }
         }
@@ -96,7 +102,7 @@ export component AppWindow inherits Window {
                 padding: 16px;
                 spacing: 12px;
                 alignment: start;
-                Text { text: "Cabinet"; font-size: 18px; font-weight: 700; }
+                Text { text: root.cabinet-label; font-size: 18px; font-weight: 700; }
                 LengthField {
                     label: "Width";
                     text <=> root.width-text;

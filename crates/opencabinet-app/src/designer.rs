@@ -1,11 +1,21 @@
 // SPDX-FileCopyrightText: 2026 OpenCabinet contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! What the window shows and edits, without any window: the cabinet being
-//! sized and the units it is shown in. Keeping it free of Slint lets it be
-//! tested directly.
+//! What the window shows and edits, without any window: the open project,
+//! where it is saved, and the cabinet being sized. Keeping it free of Slint
+//! lets it be tested directly.
 
-use opencabinet_model::{Length, Units};
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+
+use opencabinet_format::Document;
+use opencabinet_model::validate::{Issue, validate};
+use opencabinet_model::{
+    FrontNode, FrontStyle, Grain, Id, Insert, InsertKind, Length, Library, Method, Product,
+    Project, Settings, SheetMaterial, Size, SplitDirection, Standard, Units,
+};
+
+use crate::NAME_AND_VERSION;
 
 /// One of the cabinet's overall dimensions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,46 +33,129 @@ impl Dimension {
     pub const ALL: [Self; 3] = [Self::Width, Self::Height, Self::Depth];
 }
 
-/// The editing state of the window.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// The editing state of the window: a project and the file it lives in.
+///
+/// The window edits the project's first product; editing more products
+/// arrives with the designer's product list.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Designer {
-    units: Units,
-    width: Length,
-    height: Length,
-    depth: Length,
+    document: Document,
+    path: Option<PathBuf>,
+    modified: bool,
 }
 
 impl Default for Designer {
-    /// A 30" × 34-1/2" × 24" base cabinet, in inches.
+    /// A new project in inches.
     fn default() -> Self {
-        Self {
-            units: Units::Imperial,
-            width: Length::from_inches(30),
-            height: Length::from_inch_fraction(69, 2).expect("a valid fraction"),
-            depth: Length::from_inches(24),
-        }
+        Self::new(Units::Imperial)
     }
 }
 
 impl Designer {
+    /// A new, unsaved project with one 30" × 34-1/2" × 24" base cabinet,
+    /// shown in `units`.
+    #[must_use]
+    pub fn new(units: Units) -> Self {
+        Self {
+            document: new_document(units),
+            path: None,
+            modified: false,
+        }
+    }
+
+    /// Opens a project file.
+    ///
+    /// # Errors
+    /// A message for the user when the file cannot be read or has no
+    /// product to show; the current project is then left unchanged.
+    pub fn open(path: &Path) -> Result<Self, String> {
+        let document = Document::load(path).map_err(|e| format!("Cannot open the file: {e}"))?;
+        if document.project.products.is_empty() {
+            return Err("The project has no products to show yet".into());
+        }
+        Ok(Self {
+            document,
+            path: Some(path.to_owned()),
+            modified: false,
+        })
+    }
+
+    /// Saves the project to `path`, which becomes its file.
+    ///
+    /// # Errors
+    /// A message for the user when the file cannot be written.
+    pub fn save_as(&mut self, path: &Path) -> Result<(), String> {
+        self.document.generator = NAME_AND_VERSION.into();
+        self.document
+            .save_zip(path)
+            .map_err(|e| format!("Cannot save the file: {e}"))?;
+        self.path = Some(path.to_owned());
+        self.modified = false;
+        Ok(())
+    }
+
+    /// The file the project lives in, once it has been saved or opened.
+    #[must_use]
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+
+    /// Whether there are changes that are not saved.
+    #[must_use]
+    pub fn modified(&self) -> bool {
+        self.modified
+    }
+
+    /// The window title: the file's name, `*` when modified, and the program.
+    #[must_use]
+    pub fn title(&self) -> String {
+        let name = self
+            .path
+            .as_deref()
+            .and_then(Path::file_name)
+            .map_or_else(|| "Untitled".into(), |n| n.to_string_lossy().into_owned());
+        let mark = if self.modified { "*" } else { "" };
+        format!("{name}{mark} — OpenCabinet Designer")
+    }
+
+    /// Problems found in the project's authored data.
+    #[must_use]
+    pub fn issues(&self) -> Vec<Issue> {
+        validate(&self.document.project, &self.document.library)
+    }
+
+    /// The label of the product being edited, such as "B30".
+    #[must_use]
+    pub fn label(&self) -> &str {
+        &self.product().label
+    }
+
     /// The units lengths are typed and shown in.
     #[must_use]
     pub fn units(&self) -> Units {
-        self.units
+        self.document.project.settings.units
     }
 
-    /// Changes the units lengths are shown in; stored values never change.
+    /// Changes the units lengths are shown in, with that system's usual
+    /// precision. Stored lengths never change, but the preference is saved
+    /// with the project.
     pub fn set_units(&mut self, units: Units) {
-        self.units = units;
+        let settings = &mut self.document.project.settings;
+        if settings.units != units {
+            settings.units = units;
+            settings.precision = usual_precision(units);
+            self.modified = true;
+        }
     }
 
     /// A dimension's stored value.
     #[must_use]
     pub fn get(&self, dimension: Dimension) -> Length {
+        let product = self.product();
         match dimension {
-            Dimension::Width => self.width,
-            Dimension::Height => self.height,
-            Dimension::Depth => self.depth,
+            Dimension::Width => product.width,
+            Dimension::Height => product.height,
+            Dimension::Depth => product.depth,
         }
     }
 
@@ -72,14 +165,19 @@ impl Designer {
     /// A message for the user when the text is not a positive length; the
     /// stored value is then left unchanged.
     pub fn edit(&mut self, dimension: Dimension, text: &str) -> Result<(), String> {
-        let length = Length::parse(text, self.units).map_err(|e| capitalize(&e.to_string()))?;
+        let length = Length::parse(text, self.units()).map_err(|e| capitalize(&e.to_string()))?;
         if length <= Length::ZERO {
             return Err("Must be greater than zero".into());
         }
-        match dimension {
-            Dimension::Width => self.width = length,
-            Dimension::Height => self.height = length,
-            Dimension::Depth => self.depth = length,
+        let product = &mut self.document.project.products[0];
+        let field = match dimension {
+            Dimension::Width => &mut product.width,
+            Dimension::Height => &mut product.height,
+            Dimension::Depth => &mut product.depth,
+        };
+        if *field != length {
+            *field = length;
+            self.modified = true;
         }
         Ok(())
     }
@@ -87,14 +185,16 @@ impl Designer {
     /// A dimension as text to put in its field, in the current units.
     #[must_use]
     pub fn text(&self, dimension: Dimension) -> String {
-        self.get(dimension).show(self.units, self.precision()).text
+        self.get(dimension)
+            .show(self.units(), self.precision())
+            .text
     }
 
     /// How a dimension was read, for the line under its field: `= 30-1/2"`,
     /// or `≈ 30-1/2"` when the display precision rounds it.
     #[must_use]
     pub fn reading(&self, dimension: Dimension) -> String {
-        let shown = self.get(dimension).show(self.units, self.precision());
+        let shown = self.get(dimension).show(self.units(), self.precision());
         let sign = if shown.exact { '=' } else { '≈' };
         format!("{sign} {}", shown.text)
     }
@@ -107,16 +207,127 @@ impl Designer {
         reason = "a ratio for the screen"
     )]
     pub fn front_ratio(&self) -> f32 {
-        (self.width.nm() as f64 / self.height.nm() as f64) as f32
+        let product = self.product();
+        (product.width.nm() as f64 / product.height.nm() as f64) as f32
     }
 
-    /// The display precision: 1/32" or 0.1 mm, the usual shop precisions.
+    fn product(&self) -> &Product {
+        &self.document.project.products[0]
+    }
+
+    /// The project's display precision, or the units' usual one when the
+    /// file's is not usable.
     fn precision(&self) -> Length {
-        match self.units {
-            Units::Imperial => Length::from_inch_fraction(1, 32).expect("a valid fraction"),
-            Units::Metric => Length::from_nm(100_000),
+        let precision = self.document.project.settings.precision;
+        if precision > Length::ZERO {
+            precision
+        } else {
+            usual_precision(self.units())
         }
     }
+}
+
+/// 1/32" or 0.1 mm, the usual shop precisions.
+fn usual_precision(units: Units) -> Length {
+    match units {
+        Units::Imperial => Length::from_inch_fraction(1, 32).expect("a valid fraction"),
+        Units::Metric => Length::from_nm(100_000),
+    }
+}
+
+/// A project with one material, one frameless standard and one base
+/// cabinet: a drawer over a pair of doors.
+fn new_document(units: Units) -> Document {
+    let material = SheetMaterial {
+        id: Id::new(),
+        version: 1,
+        name: "Plywood 3/4\"".into(),
+        nominal_thickness: Length::from_inch_fraction(3, 4).expect("a valid fraction"),
+        actual_thickness: Length::from_mm(18),
+        length: Length::from_inches(97),
+        width: Length::from_inches(49),
+        grain: Grain::Length,
+        unknown: BTreeMap::default(),
+    };
+    let standard = Standard {
+        id: Id::new(),
+        version: 1,
+        name: "Frameless".into(),
+        derived_from: None,
+        method: Method::Frameless,
+        rules: BTreeMap::default(),
+        unknown: BTreeMap::default(),
+    };
+    let leaf = |size, kind, count| FrontNode {
+        id: Id::new(),
+        size: Some(size),
+        split: None,
+        children: Vec::new(),
+        insert: Some(Insert {
+            kind,
+            style: Some(FrontStyle::Slab),
+            count,
+            hinge_side: None,
+            shelves: None,
+            adjustments: Vec::new(),
+            unknown: BTreeMap::default(),
+        }),
+        unknown: BTreeMap::default(),
+    };
+    let product = Product {
+        id: Id::new(),
+        label: "B1".into(),
+        product_type: "base-cabinet@1".into(),
+        standard: standard.id,
+        width: Length::from_inches(30),
+        height: Length::from_inch_fraction(69, 2).expect("a valid fraction"),
+        depth: Length::from_inches(24),
+        quantity: None,
+        parameters: BTreeMap::default(),
+        materials: [("case".to_owned(), material.id)].into(),
+        front: Some(FrontNode {
+            id: Id::new(),
+            size: None,
+            split: Some(SplitDirection::Horizontal),
+            children: vec![
+                leaf(
+                    Size::Length(Length::from_inches(6)),
+                    InsertKind::Drawer,
+                    None,
+                ),
+                leaf(Size::Share(1), InsertKind::Doors, Some(2)),
+            ],
+            insert: None,
+            unknown: BTreeMap::default(),
+        }),
+        overrides: Vec::new(),
+        extensions: BTreeMap::default(),
+        unknown: BTreeMap::default(),
+    };
+    let project = Project {
+        id: Id::new(),
+        name: "Untitled".into(),
+        notes: String::new(),
+        settings: Settings {
+            units,
+            precision: usual_precision(units),
+            default_standard: standard.id,
+            unknown: BTreeMap::default(),
+        },
+        rooms: Vec::new(),
+        products: vec![product],
+        revisions: Vec::new(),
+        extensions: BTreeMap::default(),
+        unknown: BTreeMap::default(),
+    };
+    let library = Library {
+        materials: vec![material],
+        standards: vec![standard],
+        ..Library::default()
+    };
+    let mut document = Document::new(project, library);
+    document.generator = NAME_AND_VERSION.into();
+    document
 }
 
 fn capitalize(text: &str) -> String {
@@ -130,12 +341,29 @@ fn capitalize(text: &str) -> String {
 mod tests {
     use super::*;
 
+    fn scratch(test: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("opencabinet-app-{}-{test}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_new_project_is_valid_and_unmodified() {
+        let designer = Designer::default();
+        assert_eq!(designer.issues(), []);
+        assert!(!designer.modified());
+        assert_eq!(designer.title(), "Untitled — OpenCabinet Designer");
+        assert_eq!(designer.label(), "B1");
+    }
+
     #[test]
     fn edits_store_exact_values_and_keep_the_last_good_one() {
         let mut designer = Designer::default();
         designer.edit(Dimension::Width, "30 1/2").unwrap();
         assert_eq!(designer.get(Dimension::Width), Length::from_nm(774_700_000));
         assert_eq!(designer.reading(Dimension::Width), "= 30-1/2\"");
+        assert!(designer.modified());
 
         assert_eq!(
             designer.edit(Dimension::Width, "thirty"),
@@ -159,6 +387,30 @@ mod tests {
         // 600 mm is 23.622…": shown rounded, but stored exactly.
         assert_eq!(designer.reading(Dimension::Depth), "≈ 23-5/8\"");
         assert_eq!(designer.get(Dimension::Depth), Length::from_mm(600));
+    }
+
+    #[test]
+    fn a_saved_project_reopens_with_its_edits_and_units() {
+        let path = scratch("save").join("cabinet.ocab");
+        let mut designer = Designer::default();
+        designer.edit(Dimension::Width, "33").unwrap();
+        designer.set_units(Units::Metric);
+        designer.save_as(&path).unwrap();
+        assert!(!designer.modified());
+        assert_eq!(designer.title(), "cabinet.ocab — OpenCabinet Designer");
+
+        let reopened = Designer::open(&path).unwrap();
+        assert_eq!(reopened.get(Dimension::Width), Length::from_inches(33));
+        assert_eq!(reopened.units(), Units::Metric);
+        assert_eq!(reopened, designer);
+    }
+
+    #[test]
+    fn opening_something_that_is_not_a_project_explains_why() {
+        let path = scratch("open").join("notes.ocab");
+        std::fs::write(&path, "not a project").unwrap();
+        let error = Designer::open(&path).unwrap_err();
+        assert!(error.starts_with("Cannot open the file:"), "{error}");
     }
 
     #[test]

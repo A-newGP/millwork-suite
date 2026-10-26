@@ -3,13 +3,42 @@
 
 //! Drives the real window through its accessibility tree, as a screen
 //! reader would, with Slint's headless testing backend: no screen, keyboard
-//! or mouse of the machine running the test is used.
+//! or mouse of the machine running the test is used, and the dialogs give
+//! fixed answers instead of opening.
 //!
 //! The backend can start once per process, so the scenarios run in order in
 //! a single test.
 
+use std::cell::{Cell, RefCell};
+use std::path::PathBuf;
+use std::rc::Rc;
+
 use i_slint_backend_testing::ElementHandle;
 use opencabinet_app::AppWindow;
+use opencabinet_app::dialogs::Dialogs;
+
+/// Answers the dialogs from the test, and counts the questions.
+#[derive(Default)]
+struct Answers {
+    path: RefCell<Option<PathBuf>>,
+    discard: Cell<bool>,
+    asked_to_discard: Cell<u32>,
+}
+
+impl Dialogs for Answers {
+    fn open_path(&self) -> Option<PathBuf> {
+        self.path.borrow().clone()
+    }
+
+    fn save_path(&self, _suggested_name: &str) -> Option<PathBuf> {
+        self.path.borrow().clone()
+    }
+
+    fn discard_changes(&self) -> bool {
+        self.asked_to_discard.set(self.asked_to_discard.get() + 1);
+        self.discard.get()
+    }
+}
 
 fn field(window: &AppWindow, label: &str) -> ElementHandle {
     ElementHandle::find_by_accessible_label(window, label)
@@ -18,11 +47,12 @@ fn field(window: &AppWindow, label: &str) -> ElementHandle {
 }
 
 #[test]
-fn the_window_reads_lengths_switches_units_and_starts_over() {
+fn the_window_edits_saves_and_reopens_a_project() {
     i_slint_backend_testing::init_integration_test_with_system_time();
-    let window = opencabinet_app::create().unwrap();
+    let answers = Rc::new(Answers::default());
+    let window = opencabinet_app::create_with(answers.clone()).unwrap();
     assert_eq!(window.get_width_text(), "30\"");
-    assert!(window.get_status().contains("inches"));
+    assert_eq!(window.get_window_title(), "Untitled — OpenCabinet Designer");
     assert_eq!(
         ElementHandle::find_by_accessible_label(&window, "Cabinet front").count(),
         1
@@ -31,7 +61,11 @@ fn the_window_reads_lengths_switches_units_and_starts_over() {
     // Shop notation is read exactly and shown back in lowest terms.
     field(&window, "Width").set_accessible_value("30 1/2");
     assert_eq!(window.get_width_reading(), "= 30-1/2\"");
-    assert!(window.get_width_error().is_empty());
+    assert_eq!(window.get_width_error(), "");
+    assert_eq!(
+        window.get_window_title(),
+        "Untitled* — OpenCabinet Designer"
+    );
 
     // Something that is not a length explains why and keeps the last value.
     field(&window, "Height").set_accessible_value("tall");
@@ -42,14 +76,37 @@ fn the_window_reads_lengths_switches_units_and_starts_over() {
     window.invoke_units_chosen(true);
     assert!(window.get_metric());
     assert_eq!(window.get_width_text(), "774.7 mm");
-    assert!(window.get_height_error().is_empty());
+    assert_eq!(window.get_height_error(), "");
     field(&window, "Depth").set_accessible_value("600");
     window.invoke_units_chosen(false);
     assert_eq!(window.get_depth_reading(), "≈ 23-5/8\"");
 
-    // A new project starts from the defaults, in the units chosen.
+    // Refusing to discard changes keeps the project.
     window.invoke_new_project();
+    assert_eq!(answers.asked_to_discard.get(), 1);
+    assert_eq!(window.get_width_text(), "30-1/2\"");
+
+    // Saving writes the file the dialog chose and clears the change mark.
+    let dir = std::env::temp_dir().join(format!("opencabinet-window-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("test-cabinet.ocab");
+    *answers.path.borrow_mut() = Some(path.clone());
+    window.invoke_save_project();
+    assert!(path.is_file());
+    assert_eq!(
+        window.get_window_title(),
+        "test-cabinet.ocab — OpenCabinet Designer"
+    );
+    assert_eq!(window.get_status(), "Saved test-cabinet.ocab");
+
+    // A saved project starts over without asking, and reopens as saved.
+    window.invoke_new_project();
+    assert_eq!(answers.asked_to_discard.get(), 1);
     assert_eq!(window.get_width_text(), "30\"");
+    window.invoke_open_project();
+    assert_eq!(window.get_width_text(), "30-1/2\"");
+    assert_eq!(window.get_depth_reading(), "≈ 23-5/8\"");
+    assert_eq!(window.get_status(), "Opened test-cabinet.ocab");
 
     window.invoke_about();
     assert!(window.get_status().contains("GNU GPL"));
