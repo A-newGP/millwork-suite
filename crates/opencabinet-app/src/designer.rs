@@ -16,6 +16,7 @@ use opencabinet_model::{
 };
 
 use crate::NAME_AND_VERSION;
+use crate::cut_list::{CutList, cut_list};
 
 /// One of the cabinet's overall dimensions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -197,6 +198,18 @@ impl Designer {
         let shown = self.get(dimension).show(self.units(), self.precision());
         let sign = if shown.exact { '=' } else { '≈' };
         format!("{sign} {}", shown.text)
+    }
+
+    /// The project's cut list, in the current units.
+    #[must_use]
+    pub fn cut_list(&self) -> CutList {
+        let document = &self.document;
+        cut_list(
+            &document.project,
+            &document.library,
+            self.units(),
+            self.precision(),
+        )
     }
 
     /// Width over height, for drawing the front in proportion.
@@ -404,16 +417,40 @@ mod tests {
     }
 
     #[test]
-    fn a_new_project_can_be_evaluated() {
-        let designer = Designer::default();
-        let document = &designer.document;
-        let evaluation = opencabinet_eval::evaluate(&document.project, &document.library);
-        assert!(
-            evaluation.problems.iter().all(|p| !p.blocking),
-            "{:?}",
-            evaluation.problems
+    fn the_cut_list_follows_edits_and_units() {
+        let mut designer = Designer::default();
+        let list = designer.cut_list();
+        assert_eq!(
+            list.problems,
+            ["B1, note: drawer boxes are not evaluated yet"]
         );
-        assert_eq!(evaluation.parts.len(), 9);
+        let names: Vec<&str> = list.rows.iter().map(|r| r.part.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "Left side",
+                "Right side",
+                "Bottom",
+                "Front stretcher",
+                "Back stretcher",
+                "Back",
+                "Drawer front",
+                "Door 1",
+                "Door 2",
+            ]
+        );
+        // The bottom spans the inside: 30" less two 18 mm sides.
+        assert_eq!(list.rows[2].length, "28-19/32\"");
+        assert_eq!(list.rows[2].edges, "1 edge");
+
+        designer.edit(Dimension::Width, "36").unwrap();
+        designer.set_units(Units::Metric);
+        let rows = designer.cut_list().rows;
+        assert_eq!(
+            (rows[2].length.as_str(), rows[2].cut_length.as_str()),
+            ("878.4 mm", "878.4 mm")
+        );
+        assert_eq!(rows[7].edges, "4 edges");
     }
 
     #[test]

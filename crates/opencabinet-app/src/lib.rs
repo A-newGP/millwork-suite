@@ -4,6 +4,7 @@
 //! OpenCabinet Designer's window, as a library so tests can drive it
 //! without a window system (see `tests/window.rs`).
 
+pub mod cut_list;
 pub mod designer;
 pub mod dialogs;
 pub mod perf;
@@ -13,7 +14,7 @@ use std::path::Path;
 use std::rc::Rc;
 
 use opencabinet_model::Units;
-use slint::{CloseRequestResponse, ComponentHandle};
+use slint::{CloseRequestResponse, ComponentHandle, ModelRc, StandardListViewItem, VecModel};
 
 use crate::designer::{Designer, Dimension};
 use crate::dialogs::{Dialogs, SystemDialogs};
@@ -219,6 +220,28 @@ impl App {
         window.set_height_reading(designer.reading(Dimension::Height).into());
         window.set_depth_reading(designer.reading(Dimension::Depth).into());
         window.set_front_ratio(designer.front_ratio());
+        let list = designer.cut_list();
+        let rows: Vec<ModelRc<StandardListViewItem>> = list
+            .rows
+            .iter()
+            .map(|row| {
+                let cells: Vec<StandardListViewItem> = row
+                    .cells()
+                    .into_iter()
+                    .map(StandardListViewItem::from)
+                    .collect();
+                ModelRc::new(VecModel::from(cells))
+            })
+            .collect();
+        window.set_cut_rows(ModelRc::new(VecModel::from(rows)));
+        window.set_cut_problems(
+            list.problems
+                .join(
+                    "
+",
+                )
+                .into(),
+        );
         window.set_window_title(designer.title().into());
         window.set_cabinet_label(designer.label().into());
         let metric = designer.units() == Units::Metric;
