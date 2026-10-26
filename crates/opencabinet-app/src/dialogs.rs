@@ -29,6 +29,8 @@ pub enum FileKind {
     Project,
     /// A cut list for spreadsheets, `.csv`.
     CutList,
+    /// A cut list to print, `.pdf`.
+    CutListPdf,
 }
 
 impl FileKind {
@@ -36,6 +38,7 @@ impl FileKind {
         match self {
             Self::Project => ("OpenCabinet project", "ocab"),
             Self::CutList => ("Cut list for spreadsheets", "csv"),
+            Self::CutListPdf => ("PDF document", "pdf"),
         }
     }
 }
@@ -57,7 +60,7 @@ impl Dialogs for SystemDialogs {
         let (name, extension) = kind.filter();
         let title = match kind {
             FileKind::Project => "Save project",
-            FileKind::CutList => "Export cut list",
+            FileKind::CutList | FileKind::CutListPdf => "Export cut list",
         };
         let path = FileDialog::new()
             .set_title(title)

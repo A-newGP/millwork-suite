@@ -13,6 +13,7 @@ on:
     paths:
       - crates/**
       - Cargo.lock
+      - assets/**
       - packaging/windows/**
       - .github/workflows/windows-installer.yml
   workflow_dispatch:
@@ -77,6 +78,7 @@ jobs:
           Start-Process $env:INSTALLER -Wait -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/CURRENTUSER', "/DIR=$dir"
           $exe = Join-Path $dir 'opencabinet.exe'
           if (-not (Test-Path $exe)) { throw 'opencabinet.exe was not installed' }
+          if (-not (Test-Path (Join-Path $dir 'fonts\NotoSans-Regular.ttf'))) { throw 'the font was not installed' }
           $app = Start-Process $exe -PassThru
           Start-Sleep -Seconds 5
           if ($app.HasExited) { throw "the program exited with code $($app.ExitCode)" }

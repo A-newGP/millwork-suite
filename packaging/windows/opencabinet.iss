@@ -51,6 +51,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "..\..\target\release\opencabinet.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
+; The bundled font, as separate files with its license (ADR-0015).
+Source: "..\..\assets\fonts\noto-sans\*.ttf"; DestDir: "{app}\fonts"; Flags: ignoreversion
+Source: "..\..\assets\fonts\noto-sans\OFL.txt"; DestDir: "{app}\fonts"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\OpenCabinet Designer"; Filename: "{app}\opencabinet.exe"

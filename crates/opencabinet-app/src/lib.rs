@@ -6,6 +6,7 @@
 
 pub mod designer;
 pub mod dialogs;
+pub mod fonts;
 pub mod perf;
 
 use std::cell::RefCell;
@@ -85,6 +86,8 @@ pub fn create_with(dialogs: Rc<dyn Dialogs>) -> Result<AppWindow, slint::Platfor
         };
         handle.export_cut_list(separator);
     });
+    let handle = Rc::clone(&app);
+    window.on_export_cut_list_pdf(move || handle.export_cut_list_pdf());
     let handle = Rc::clone(&app);
     window.on_about(move || {
         handle.status(&format!(
@@ -208,6 +211,21 @@ impl App {
             return;
         };
         match self.designer.borrow().export_cut_list(&path, separator) {
+            Ok(()) => self.status(&format!("Exported the cut list to {}", file_name(&path))),
+            Err(message) => self.status(&message),
+        }
+    }
+
+    fn export_cut_list_pdf(&self) {
+        let fonts = match fonts::load() {
+            Ok(fonts) => fonts,
+            Err(message) => return self.status(&message),
+        };
+        let suggested = format!("{} cut list.pdf", self.designer.borrow().label());
+        let Some(path) = self.dialogs.save_path(&suggested, FileKind::CutListPdf) else {
+            return;
+        };
+        match self.designer.borrow().export_cut_list_pdf(&path, &fonts) {
             Ok(()) => self.status(&format!("Exported the cut list to {}", file_name(&path))),
             Err(message) => self.status(&message),
         }
