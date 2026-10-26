@@ -183,6 +183,7 @@ fn the_window_edits_saves_and_reopens_a_project() {
     assert_eq!(window.get_kind_index(), 1);
 
     cabinet_list(&window);
+    walls_and_placements(&window);
 
     window.invoke_about();
     assert!(window.get_status().contains("GNU GPL"));
@@ -246,4 +247,44 @@ fn cabinet_list(window: &AppWindow) {
     assert_eq!(cabinets(window), ["W1 · Wall · 30-1/2\""]);
     window.invoke_delete_cabinet();
     assert_eq!(window.get_status(), "A project keeps at least one cabinet");
+}
+
+/// The Walls tab and the placement of the only cabinet, W1, 30-1/2" wide.
+fn walls_and_placements(window: &AppWindow) {
+    let items = |model: slint::ModelRc<slint::StandardListViewItem>| -> Vec<String> {
+        (0..model.row_count())
+            .map(|i| model.row_data(i).unwrap().text.to_string())
+            .collect()
+    };
+    // Switch to the Walls tab, as a click on it does.
+    window.set_tab_index(1);
+    window.invoke_tab_chosen(1);
+    window.invoke_add_wall();
+    assert_eq!(items(window.get_walls()), ["Wall A · 120\""]);
+    assert!(window.get_has_wall());
+    field(window, "Wall length").set_accessible_value("144");
+    assert_eq!(window.get_wall_length_reading(), "= 144\"");
+    window.invoke_add_window();
+    assert_eq!(items(window.get_openings()), ["Window · 36\" at 54\""]);
+    assert_eq!(window.get_drawing_title(), "Elevation of wall Wall A");
+
+    // A wall cabinet goes 54" up.
+    window.set_tab_index(0);
+    window.invoke_tab_chosen(0);
+    window.invoke_place_cabinet();
+    assert_eq!(items(window.get_placements()), ["Wall A at 0\", 54\" up"]);
+    assert!(window.get_has_placement());
+    assert_eq!(window.get_placement_elevation_text(), "54\"");
+    assert_eq!(window.get_placement_problems(), "");
+
+    // Hung at 72", its top is above the 96" wall.
+    // The field is scrolled out of the test window's view, so it is
+    // edited through its callback, as typing into it does.
+    window.invoke_placement_elevation_edited("72".into());
+    assert_eq!(
+        window.get_placement_problems(),
+        "W1 is taller than wall Wall A"
+    );
+    window.invoke_unplace_cabinet();
+    assert!(!window.get_has_placement());
 }

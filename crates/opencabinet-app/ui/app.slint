@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import {
-    Button, ComboBox, LineEdit, Palette, StandardListView, StandardTableView,
+    Button, ComboBox, LineEdit, Palette, ScrollView, StandardListView, StandardTableView,
+    TabWidget,
 } from "std-widgets.slint";
 
 // A length field: a label, the text as typed, and below it either the value
@@ -68,6 +69,45 @@ export component AppWindow inherits Window {
     in property <string> width-error;
     in property <string> height-error;
     in property <string> depth-error;
+    // The left panel's tab: 0 for the cabinets, 1 for the walls.
+    in-out property <int> tab-index;
+    // The room's walls, the edited wall's openings, and the edited
+    // cabinet's placements, with which of each is being edited.
+    in property <[StandardListViewItem]> walls;
+    in-out property <int> wall-index;
+    in property <[string]> wall-names;
+    in property <[StandardListViewItem]> openings;
+    in-out property <int> opening-index;
+    in property <[StandardListViewItem]> placements;
+    in-out property <int> placement-index;
+    in-out property <int> placement-wall-index;
+    in property <bool> has-wall;
+    in property <bool> has-opening;
+    in property <bool> has-placement;
+    in-out property <string> wall-length-text;
+    in property <string> wall-length-reading;
+    in property <string> wall-length-error;
+    in-out property <string> wall-height-text;
+    in property <string> wall-height-reading;
+    in property <string> wall-height-error;
+    in-out property <string> opening-offset-text;
+    in property <string> opening-offset-reading;
+    in property <string> opening-offset-error;
+    in-out property <string> opening-width-text;
+    in property <string> opening-width-reading;
+    in property <string> opening-width-error;
+    in-out property <string> opening-height-text;
+    in property <string> opening-height-reading;
+    in property <string> opening-height-error;
+    in-out property <string> opening-sill-text;
+    in property <string> opening-sill-reading;
+    in property <string> opening-sill-error;
+    in-out property <string> placement-offset-text;
+    in property <string> placement-offset-reading;
+    in property <string> placement-offset-error;
+    in-out property <string> placement-elevation-text;
+    in property <string> placement-elevation-reading;
+    in property <string> placement-elevation-error;
     // The drawing: the elevation of the edited cabinet's wall, or the
     // cabinet alone. Paths and labels are in millimeters; the drawing area
     // scales them to fit.
@@ -89,6 +129,26 @@ export component AppWindow inherits Window {
     callback height-edited(text: string);
     callback depth-edited(text: string);
     callback units-chosen(metric: bool);
+    callback wall-length-edited(text: string);
+    callback wall-height-edited(text: string);
+    callback opening-offset-edited(text: string);
+    callback opening-width-edited(text: string);
+    callback opening-height-edited(text: string);
+    callback opening-sill-edited(text: string);
+    callback placement-offset-edited(text: string);
+    callback placement-elevation-edited(text: string);
+    callback tab-chosen(index: int);
+    callback wall-chosen(index: int);
+    callback add-wall();
+    callback delete-wall();
+    callback opening-chosen(index: int);
+    callback add-window();
+    callback add-door();
+    callback delete-opening();
+    callback placement-chosen(index: int);
+    callback place-cabinet();
+    callback unplace-cabinet();
+    callback placement-wall-chosen(index: int);
     callback cabinet-chosen(index: int);
     callback add-cabinet();
     callback duplicate-cabinet();
@@ -162,28 +222,121 @@ export component AppWindow inherits Window {
         HorizontalLayout {
             vertical-stretch: 1;
 
-            VerticalLayout {
-                width: 230px;
-                padding: 16px;
-                spacing: 8px;
-                Text { text: "Cabinets"; font-size: 18px; font-weight: 700; }
-                StandardListView {
-                    accessible-label: "Cabinets";
-                    vertical-stretch: 1;
-                    model: root.cabinets;
-                    current-item <=> root.cabinet-index;
-                    current-item-changed(index) => { root.cabinet-chosen(index); }
+            TabWidget {
+                width: 250px;
+                current-index <=> root.tab-index;
+                changed current-index => { root.tab-chosen(self.current-index); }
+
+                Tab {
+                    title: "Cabinets";
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 8px;
+                        StandardListView {
+                            accessible-label: "Cabinets";
+                            vertical-stretch: 1;
+                            model: root.cabinets;
+                            current-item <=> root.cabinet-index;
+                            current-item-changed(index) => { root.cabinet-chosen(index); }
+                        }
+                        HorizontalLayout {
+                            spacing: 4px;
+                            Button { text: "Add"; clicked => { root.add-cabinet(); } }
+                            Button { text: "Duplicate"; clicked => { root.duplicate-cabinet(); } }
+                            Button { text: "Delete"; clicked => { root.delete-cabinet(); } }
+                        }
+                    }
                 }
-                HorizontalLayout {
-                    spacing: 4px;
-                    Button { text: "Add"; clicked => { root.add-cabinet(); } }
-                    Button { text: "Duplicate"; clicked => { root.duplicate-cabinet(); } }
-                    Button { text: "Delete"; clicked => { root.delete-cabinet(); } }
+
+                Tab {
+                    title: "Walls";
+                    ScrollView {
+                        VerticalLayout {
+                            padding: 12px;
+                            spacing: 8px;
+                            alignment: start;
+                            StandardListView {
+                                accessible-label: "Walls";
+                                height: 110px;
+                                model: root.walls;
+                                current-item <=> root.wall-index;
+                                current-item-changed(index) => { root.wall-chosen(index); }
+                            }
+                            HorizontalLayout {
+                                spacing: 4px;
+                                Button { text: "Add wall"; clicked => { root.add-wall(); } }
+                                Button { text: "Delete"; clicked => { root.delete-wall(); } }
+                            }
+                            if root.has-wall: VerticalLayout {
+                                spacing: 8px;
+                                LengthField {
+                                    label: "Wall length";
+                                    text <=> root.wall-length-text;
+                                    reading: root.wall-length-reading;
+                                    error: root.wall-length-error;
+                                    edited(text) => { root.wall-length-edited(text); }
+                                }
+                                LengthField {
+                                    label: "Wall height";
+                                    text <=> root.wall-height-text;
+                                    reading: root.wall-height-reading;
+                                    error: root.wall-height-error;
+                                    edited(text) => { root.wall-height-edited(text); }
+                                }
+                                Text { text: "Windows and doors"; font-weight: 700; }
+                                StandardListView {
+                                    accessible-label: "Windows and doors";
+                                    height: 80px;
+                                    model: root.openings;
+                                    current-item <=> root.opening-index;
+                                    current-item-changed(index) => { root.opening-chosen(index); }
+                                }
+                                HorizontalLayout {
+                                    spacing: 4px;
+                                    Button { text: "Window"; clicked => { root.add-window(); } }
+                                    Button { text: "Door"; clicked => { root.add-door(); } }
+                                    Button { text: "Delete"; clicked => { root.delete-opening(); } }
+                                }
+                                if root.has-opening: VerticalLayout {
+                                    spacing: 8px;
+                                    LengthField {
+                                        label: "Opening from wall start";
+                                        text <=> root.opening-offset-text;
+                                        reading: root.opening-offset-reading;
+                                        error: root.opening-offset-error;
+                                        edited(text) => { root.opening-offset-edited(text); }
+                                    }
+                                    LengthField {
+                                        label: "Opening width";
+                                        text <=> root.opening-width-text;
+                                        reading: root.opening-width-reading;
+                                        error: root.opening-width-error;
+                                        edited(text) => { root.opening-width-edited(text); }
+                                    }
+                                    LengthField {
+                                        label: "Opening height";
+                                        text <=> root.opening-height-text;
+                                        reading: root.opening-height-reading;
+                                        error: root.opening-height-error;
+                                        edited(text) => { root.opening-height-edited(text); }
+                                    }
+                                    LengthField {
+                                        label: "Sill height";
+                                        text <=> root.opening-sill-text;
+                                        reading: root.opening-sill-reading;
+                                        error: root.opening-sill-error;
+                                        edited(text) => { root.opening-sill-edited(text); }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
-            VerticalLayout {
-                width: 260px;
+            ScrollView {
+                width: 280px;
+                VerticalLayout {
                 padding: 16px;
                 spacing: 12px;
                 alignment: start;
@@ -237,6 +390,44 @@ export component AppWindow inherits Window {
                     reading: root.depth-reading;
                     error: root.depth-error;
                     edited(text) => { root.depth-edited(text); }
+                }
+                Text { text: "Placement"; font-weight: 700; }
+                StandardListView {
+                    accessible-label: "Placements";
+                    height: 70px;
+                    model: root.placements;
+                    current-item <=> root.placement-index;
+                    current-item-changed(index) => { root.placement-chosen(index); }
+                }
+                HorizontalLayout {
+                    spacing: 4px;
+                    Button { text: "Place on wall"; clicked => { root.place-cabinet(); } }
+                    Button { text: "Remove"; clicked => { root.unplace-cabinet(); } }
+                }
+                if root.has-placement: VerticalLayout {
+                    spacing: 8px;
+                    Text { text: "Wall"; }
+                    ComboBox {
+                        accessible-label: "Wall";
+                        model: root.wall-names;
+                        current-index <=> root.placement-wall-index;
+                        selected => { root.placement-wall-chosen(self.current-index); }
+                    }
+                    LengthField {
+                        label: "Cabinet from wall start";
+                        text <=> root.placement-offset-text;
+                        reading: root.placement-offset-reading;
+                        error: root.placement-offset-error;
+                        edited(text) => { root.placement-offset-edited(text); }
+                    }
+                    LengthField {
+                        label: "Above floor";
+                        text <=> root.placement-elevation-text;
+                        reading: root.placement-elevation-reading;
+                        error: root.placement-elevation-error;
+                        edited(text) => { root.placement-elevation-edited(text); }
+                    }
+                }
                 }
             }
 
