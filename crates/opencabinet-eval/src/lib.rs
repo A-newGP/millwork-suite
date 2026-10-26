@@ -9,19 +9,23 @@
 //!
 //! # What this version evaluates
 //!
-//! Frameless base cabinets (`base-cabinet@1`) with full-overlay slab doors,
-//! drawer fronts and false fronts, drawer boxes and adjustable shelves. Notation: `W`, `H`, `D` the product's
-//! width, height and depth; `T` the actual thickness of the `case`
-//! material; `K` the toe kick height; `S` the stretcher width; `G` the
-//! front gap; `g` the back groove depth. The box height is `Hb = H − K`.
+//! Frameless base, wall and tall cabinets (`base-cabinet@1`,
+//! `wall-cabinet@1`, `tall-cabinet@1`) with full-overlay slab doors, drawer
+//! fronts and false fronts, drawer boxes and adjustable shelves. Notation:
+//! `W`, `H`, `D` the product's width, height and depth; `T` the actual
+//! thickness of the `case` material; `K` the toe kick height, none for a
+//! wall cabinet; `S` the stretcher width; `G` the front gap; `g` the back
+//! groove depth. The box height is `Hb = H − K`.
 //!
 //! | Part | Length × width | Banded edges |
 //! | --- | --- | --- |
 //! | `case/side.left`, `case/side.right` | `Hb` × `D` | front (`y1`) |
 //! | `case/bottom` | `W − 2T` × `D` | front (`y1`) |
-//! | `case/stretcher.front` | `W − 2T` × `S` | front (`y1`) |
-//! | `case/stretcher.back` | `W − 2T` × `S` | none |
-//! | `case/back`, grooved | `Hb − T + g` × `W − 2T + 2g` | none |
+//! | `case/stretcher.front`, base only | `W − 2T` × `S` | front (`y1`) |
+//! | `case/stretcher.back`, base only | `W − 2T` × `S` | none |
+//! | `case/top`, wall and tall | `W − 2T` × `D` | front (`y1`) |
+//! | `case/back`, grooved, base | `Hb − T + g` × `W − 2T + 2g` | none |
+//! | `case/back`, grooved, wall and tall | `Hb − 2T + 2g` × `W − 2T + 2g` | none |
 //! | `case/back`, applied | `Hb` × `W` | none |
 //!
 //! Fronts cover the box face, `W` × `Hb`, divided by the front tree. Each
@@ -173,12 +177,12 @@ pub fn evaluate_product(
     library: &Library,
     quantity: u32,
 ) -> Result<Evaluated, String> {
-    if product.product_type != "base-cabinet@1" {
-        return Err(format!(
+    let kind = Kind::of(&product.product_type).ok_or_else(|| {
+        format!(
             "product type `{}` cannot be evaluated yet",
             product.product_type
-        ));
-    }
+        )
+    })?;
     if !product.overrides.is_empty() {
         return Err("overrides cannot be applied yet".into());
     }
@@ -207,49 +211,31 @@ pub fn evaluate_product(
 
     let (w, h, d) = (product.width, product.height, product.depth);
     let t = case.actual_thickness;
-    let box_height = h - rules.toe_kick.height;
+    // Wall cabinets hang; base and tall ones stand on a toe kick.
+    let toe_kick = match kind {
+        Kind::Wall => Length::ZERO,
+        Kind::Base | Kind::Tall => rules.toe_kick.height,
+    };
+    let box_height = h - toe_kick;
     let inner_width = w - t * 2;
-    let stretcher = rules.case.stretcher_width;
-    if box_height <= Length::ZERO || inner_width <= Length::ZERO {
+    if box_height <= t * 2 || inner_width <= Length::ZERO {
         return Err("the cabinet is too small for its toe kick and sides".into());
     }
 
     let maker = PartMaker { product, quantity };
     let front_edge = banded(case_band, &[Y1]);
-    let mut parts = vec![
-        maker.part("case/side.left", "side", case, box_height, d, front_edge),
-        maker.part("case/side.right", "side", case, box_height, d, front_edge),
-        maker.part("case/bottom", "bottom", case, inner_width, d, front_edge),
-        maker.part(
-            "case/stretcher.front",
-            "stretcher",
-            case,
-            inner_width,
-            stretcher,
-            front_edge,
-        ),
-        maker.part(
-            "case/stretcher.back",
-            "stretcher",
-            case,
-            inner_width,
-            stretcher,
-            BARE,
-        ),
-    ];
-    let (back_length, back_width) = match rules.back {
-        Back::Grooved { groove_depth } => (
-            box_height - t + groove_depth,
-            inner_width + groove_depth * 2,
-        ),
-        Back::Applied => (box_height, w),
+    let size = CaseSize {
+        box_height,
+        inner_width,
+        width: w,
+        depth: d,
     };
-    parts.push(maker.part("case/back", "back", back, back_length, back_width, BARE));
+    let mut parts = case_parts(kind, size, &rules, &maker, (case, back), front_edge);
 
     if let Some(root) = &product.front {
         let face = Rect {
             x: Length::ZERO,
-            y: rules.toe_kick.height,
+            y: toe_kick,
             width: w,
             height: box_height,
         };
@@ -270,6 +256,103 @@ pub fn evaluate_product(
         parts,
         notes: lookup.notes.into_inner(),
     })
+}
+
+/// The overall sizes a case is built from.
+#[derive(Clone, Copy)]
+struct CaseSize {
+    /// Above the toe kick.
+    box_height: Length,
+    /// Between the sides.
+    inner_width: Length,
+    width: Length,
+    depth: Length,
+}
+
+/// The case's parts: sides, bottom, top or stretchers, and back.
+fn case_parts(
+    kind: Kind,
+    size: CaseSize,
+    rules: &Rules,
+    maker: &PartMaker<'_>,
+    (case, back): (&SheetMaterial, &SheetMaterial),
+    front_edge: Bands<'_>,
+) -> Vec<Part> {
+    let CaseSize {
+        box_height,
+        inner_width,
+        width: w,
+        depth: d,
+    } = size;
+    let t = case.actual_thickness;
+    let mut parts = vec![
+        maker.part("case/side.left", "side", case, box_height, d, front_edge),
+        maker.part("case/side.right", "side", case, box_height, d, front_edge),
+        maker.part("case/bottom", "bottom", case, inner_width, d, front_edge),
+    ];
+    // A base cabinet is tied at the top by two stretchers, so its back is
+    // grooved into the bottom only; wall and tall cabinets have a full top,
+    // grooved like the bottom.
+    let grooved_ends = match kind {
+        Kind::Base => {
+            let stretcher = rules.case.stretcher_width;
+            parts.extend([
+                maker.part(
+                    "case/stretcher.front",
+                    "stretcher",
+                    case,
+                    inner_width,
+                    stretcher,
+                    front_edge,
+                ),
+                maker.part(
+                    "case/stretcher.back",
+                    "stretcher",
+                    case,
+                    inner_width,
+                    stretcher,
+                    BARE,
+                ),
+            ]);
+            1
+        }
+        Kind::Wall | Kind::Tall => {
+            parts.push(maker.part("case/top", "top", case, inner_width, d, front_edge));
+            2
+        }
+    };
+    let (back_length, back_width) = match rules.back {
+        Back::Grooved { groove_depth } => (
+            box_height - (t - groove_depth) * grooved_ends,
+            inner_width + groove_depth * 2,
+        ),
+        Back::Applied => (box_height, w),
+    };
+    parts.push(maker.part("case/back", "back", back, back_length, back_width, BARE));
+
+    parts
+}
+
+/// The kinds of cabinet the evaluator builds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Kind {
+    /// Stands on a toe kick, tied at the top by stretchers.
+    Base,
+    /// Hangs on the wall, with a full top and no toe kick.
+    Wall,
+    /// Stands on a toe kick, with a full top.
+    Tall,
+}
+
+impl Kind {
+    fn of(product_type: &str) -> Option<Self> {
+        match product_type {
+            "base-cabinet@1" => Some(Self::Base),
+            "wall-cabinet@1" => Some(Self::Wall),
+            "tall-cabinet@1" => Some(Self::Tall),
+            _ => None,
+        }
+    }
 }
 
 /// What the parts of a front's inserts depend on.

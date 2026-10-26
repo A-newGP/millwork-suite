@@ -137,6 +137,7 @@ fn part_name(part: &Part) -> String {
         ("stretcher", "stretcher.front") => "Front stretcher".into(),
         ("stretcher", "stretcher.back") => "Back stretcher".into(),
         ("bottom", _) => "Bottom".into(),
+        ("top", _) => "Top".into(),
         ("back", _) => "Back".into(),
         ("door", door) => format!("Door {}", door.trim_start_matches("door.")),
         ("drawerFront", _) => "Drawer front".into(),

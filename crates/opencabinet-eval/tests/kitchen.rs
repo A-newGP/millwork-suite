@@ -16,7 +16,7 @@
 use std::path::PathBuf;
 
 use opencabinet_eval::{Part, evaluate};
-use opencabinet_model::{FrontStyle, Library, Project};
+use opencabinet_model::{FrontNode, FrontStyle, Length, Library, Project};
 use serde::de::DeserializeOwned;
 
 fn read<T: DeserializeOwned>(path: &str) -> T {
@@ -146,6 +146,61 @@ fn shelves_span_the_inside_less_their_clearances() {
     );
 }
 
+/// The sample's B30 turned into another kind of cabinet, `w` × `h` × `d`
+/// inches, with a pair of slab doors filling its front.
+fn variant(product_type: &str, w: i64, h: i64, d: i64) -> (Project, Library) {
+    let (mut project, library) = kitchen_with_slab_doors();
+    let product = &mut project.products[0];
+    product.product_type = product_type.into();
+    product.width = Length::from_inches(w);
+    product.height = Length::from_inches(h);
+    product.depth = Length::from_inches(d);
+    let front = product.front.as_mut().unwrap();
+    let doors = front.children.remove(1);
+    *front = FrontNode {
+        size: None,
+        ..doors
+    };
+    project.rooms.clear();
+    (project, library)
+}
+
+#[test]
+fn a_wall_cabinet_has_a_top_and_no_toe_kick() {
+    // 30" × 30" × 12": the box is the full 762 mm high.
+    let (project, library) = variant("wall-cabinet@1", 30, 30, 12);
+    assert_eq!(
+        b30(&project, &library, ""),
+        [
+            "case/side.left: 762 × 304.8 × 18, cut 762 × 304.8",
+            "case/side.right: 762 × 304.8 × 18, cut 762 × 304.8",
+            "case/bottom: 726 × 304.8 × 18, cut 726 × 304.8",
+            "case/top: 726 × 304.8 × 18, cut 726 × 304.8",
+            // Grooved into the top and the bottom: H − 2T + 2g.
+            "case/back: 745.05 × 745.05 × 12, cut 745.05 × 745.05",
+            // The face, 762 mm square, in two halves less the gap.
+            "front/403/door.1: 758.825 × 377.825 × 18, cut 757.825 × 376.825",
+            "front/403/door.2: 758.825 × 377.825 × 18, cut 757.825 × 376.825",
+        ]
+    );
+}
+
+#[test]
+fn a_tall_cabinet_has_a_top_and_a_toe_kick() {
+    // 24" × 84" × 24": Hb = 2133.6 − 101.6 = 2032 mm.
+    let (project, library) = variant("tall-cabinet@1", 24, 84, 24);
+    assert_eq!(
+        b30(&project, &library, "case/"),
+        [
+            "case/side.left: 2032 × 609.6 × 18, cut 2032 × 609.6",
+            "case/side.right: 2032 × 609.6 × 18, cut 2032 × 609.6",
+            "case/bottom: 573.6 × 609.6 × 18, cut 573.6 × 609.6",
+            "case/top: 573.6 × 609.6 × 18, cut 573.6 × 609.6",
+            "case/back: 2015.05 × 592.65 × 12, cut 2015.05 × 592.65",
+        ]
+    );
+}
+
 #[test]
 fn what_cannot_be_evaluated_yet_is_reported_not_guessed() {
     let project: Project = read("project.json");
@@ -165,7 +220,7 @@ fn what_cannot_be_evaluated_yet_is_reported_not_guessed() {
             "error: B30: only slab fronts can be evaluated yet",
             "error: SB36: product type `sink-base@1` cannot be evaluated yet",
             "error: BC42: product type `blind-corner-base@1` cannot be evaluated yet",
-            "error: W30: product type `wall-cabinet@1` cannot be evaluated yet",
+            "error: W30: face frame cabinets cannot be evaluated yet",
             "error: IS48: no material chosen for `back`",
             "error: F3: product type `filler@1` cannot be evaluated yet",
             "error: V24: product type `vanity-base@1` cannot be evaluated yet",

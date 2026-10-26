@@ -152,6 +152,12 @@ fn the_window_edits_saves_and_reopens_a_project() {
         "Exported the cut list to test-cabinet.pdf"
     );
 
+    // Choosing another kind of cabinet gives its usual sizes and parts.
+    window.invoke_kind_chosen(1);
+    assert_eq!(window.get_cabinet_label(), "W1");
+    assert_eq!(window.get_height_text(), "30\"");
+    assert_eq!(window.get_kind_index(), 1);
+
     window.invoke_about();
     assert!(window.get_status().contains("GNU GPL"));
 }
