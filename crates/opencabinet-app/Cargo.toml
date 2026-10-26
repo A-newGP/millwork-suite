@@ -16,6 +16,7 @@ name = "opencabinet"
 path = "src/main.rs"
 
 [dependencies]
+opencabinet-eval = { workspace = true }
 opencabinet-model = { workspace = true }
 opencabinet-reports = { workspace = true }
 opencabinet-format = { workspace = true }

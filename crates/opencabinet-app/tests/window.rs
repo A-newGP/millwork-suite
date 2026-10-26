@@ -66,8 +66,9 @@ fn the_window_edits_saves_and_reopens_a_project() {
     let window = opencabinet_app::create_with(answers.clone()).unwrap();
     assert_eq!(window.get_width_text(), "30\"");
     assert_eq!(window.get_window_title(), "Untitled — OpenCabinet Designer");
+    // A cabinet that is not placed on a wall is drawn alone.
     assert_eq!(
-        ElementHandle::find_by_accessible_label(&window, "Cabinet front").count(),
+        ElementHandle::find_by_accessible_label(&window, "B1, not placed on a wall").count(),
         1
     );
 

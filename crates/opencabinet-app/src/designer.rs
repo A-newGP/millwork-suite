@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use opencabinet_eval::{elevation, front_view, placement_problems};
 use opencabinet_format::Document;
 use opencabinet_model::validate::{Issue, validate};
 use opencabinet_model::{
@@ -19,6 +20,7 @@ use opencabinet_reports::{
 };
 
 use crate::NAME_AND_VERSION;
+use crate::drawing::{self, Drawing};
 
 /// One of the cabinet's overall dimensions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -477,16 +479,31 @@ impl Designer {
         Ok(files.len() - 1)
     }
 
-    /// Width over height, for drawing the front in proportion.
+    /// What the drawing area shows: the elevation of the wall the cabinet
+    /// being edited stands on, or the cabinet alone when it is not placed
+    /// on a wall.
     #[must_use]
-    #[allow(
-        clippy::cast_precision_loss,
-        clippy::cast_possible_truncation,
-        reason = "a ratio for the screen"
-    )]
-    pub fn front_ratio(&self) -> f32 {
+    pub fn drawing(&self) -> Drawing {
+        let (project, library) = (&self.document.project, &self.document.library);
         let product = self.product();
-        (product.width.nm() as f64 / product.height.nm() as f64) as f32
+        let show = |length: Length| length.show(self.units(), self.precision()).text;
+        let wall = project
+            .rooms
+            .iter()
+            .flat_map(|r| &r.placements)
+            .find(|p| p.product == product.id)
+            .and_then(|p| p.wall);
+        if let Some(elevation) = wall.and_then(|w| elevation(project, library, w)) {
+            return drawing::wall(&elevation, product.id, &show);
+        }
+        let view = front_view(product, library).ok();
+        drawing::cabinet(&product.label, product.width, product.height, view.as_ref())
+    }
+
+    /// What is wrong with where the cabinets are placed on the walls.
+    #[must_use]
+    pub fn placement_problems(&self) -> Vec<String> {
+        placement_problems(&self.document.project)
     }
 
     fn product(&self) -> &Product {
@@ -1063,6 +1080,26 @@ mod tests {
     }
 
     #[test]
+    fn the_drawing_shows_the_wall_of_the_cabinet_being_edited() {
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/kitchen.ocab");
+        let mut designer = Designer::open(&fixture).unwrap();
+        let drawing = designer.drawing();
+        assert_eq!(drawing.title, "Elevation of wall North");
+        let labels: Vec<&str> = drawing.labels.iter().map(|l| l.text.as_str()).collect();
+        // Every cabinet on the wall, then its dimensions in the project's
+        // units: the B30s' widths and the whole wall.
+        assert_eq!(&labels[..6], ["B30", "B30", "SB36", "F3", "BC42", "W30"]);
+        assert_eq!(labels.iter().filter(|&&l| l == "30\"").count(), 4);
+        assert!(labels.contains(&"144\""), "{labels:?}");
+        assert!(!drawing.highlight.is_empty() && !drawing.marks.is_empty());
+        assert_eq!(designer.placement_problems(), Vec::<String>::new());
+
+        // The island stands free, not on a wall: it is drawn alone.
+        designer.select(4);
+        assert_eq!(designer.drawing().title, "IS48, not placed on a wall");
+    }
+
+    #[test]
     fn removing_a_cabinet_removes_its_placements() {
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/kitchen.ocab");
         let mut designer = Designer::open(&fixture).unwrap();
@@ -1072,12 +1109,5 @@ mod tests {
         designer.delete().unwrap();
         assert_eq!(placed(&designer), 5);
         assert_eq!(designer.label(), "SB36");
-    }
-
-    #[test]
-    fn the_front_ratio_follows_width_and_height() {
-        let mut designer = Designer::default();
-        designer.edit(Dimension::Width, "69/2").unwrap();
-        assert!((designer.front_ratio() - 1.0).abs() < f32::EPSILON);
     }
 }

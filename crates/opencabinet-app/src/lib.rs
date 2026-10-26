@@ -6,6 +6,7 @@
 
 pub mod designer;
 pub mod dialogs;
+pub mod drawing;
 pub mod fonts;
 pub mod perf;
 
@@ -359,7 +360,7 @@ impl App {
         window.set_width_reading(designer.reading(Dimension::Width).into());
         window.set_height_reading(designer.reading(Dimension::Height).into());
         window.set_depth_reading(designer.reading(Dimension::Depth).into());
-        window.set_front_ratio(designer.front_ratio());
+        show_drawing(window, &designer);
         let list = designer.cut_list();
         let rows: Vec<ModelRc<StandardListViewItem>> = list
             .rows
@@ -400,6 +401,38 @@ impl App {
             window.set_status(message.into());
         }
     }
+}
+
+/// The drawing area: the elevation or the cabinet, and what is wrong with
+/// the placements.
+fn show_drawing(window: &AppWindow, designer: &Designer) {
+    let drawing = designer.drawing();
+    // An empty path is not drawn; a move alone draws nothing.
+    let path = |commands: String| {
+        if commands.is_empty() {
+            "M 0 0".into()
+        } else {
+            commands.into()
+        }
+    };
+    window.set_drawing_title(drawing.title.into());
+    window.set_drawing_width(drawing.width);
+    window.set_drawing_height(drawing.height);
+    window.set_drawing_lines(path(drawing.lines));
+    window.set_drawing_marks(path(drawing.marks));
+    window.set_drawing_highlight(path(drawing.highlight));
+    window.set_drawing_dimensions(path(drawing.dimensions));
+    let labels: Vec<ui::DrawingLabel> = drawing
+        .labels
+        .into_iter()
+        .map(|l| ui::DrawingLabel {
+            x: l.x,
+            y: l.y,
+            text: l.text.into(),
+        })
+        .collect();
+    window.set_drawing_labels(ModelRc::new(VecModel::from(labels)));
+    window.set_placement_problems(designer.placement_problems().join("\n").into());
 }
 
 fn file_name(path: &Path) -> String {
