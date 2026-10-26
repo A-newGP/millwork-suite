@@ -12,6 +12,8 @@
   "globs": ["**/*.md"],
   "ignores": [
     "node_modules/**",
+    // Build output, such as the licenses of fonts in generated docs.
+    "target/**",
     // Copied verbatim from the official Contributor Covenant text.
     "CODE_OF_CONDUCT.md"
   ]
