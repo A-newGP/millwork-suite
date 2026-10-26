@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 OpenCabinet contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! The cut list as the window shows it: the evaluator's parts as rows of
-//! text in the user's units, and what could not be evaluated.
+//! The cut list as people read it: the evaluator's parts as rows of text in
+//! the user's units, and what could not be evaluated.
 
 use opencabinet_eval::{Part, evaluate};
 use opencabinet_model::{Length, Library, Project, Units};

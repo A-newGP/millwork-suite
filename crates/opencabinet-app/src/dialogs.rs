@@ -14,40 +14,61 @@ pub trait Dialogs {
     /// The project file to open, or `None` when the user cancels.
     fn open_path(&self) -> Option<PathBuf>;
 
-    /// Where to save the project, starting from `suggested_name`, or `None`
-    /// when the user cancels.
-    fn save_path(&self, suggested_name: &str) -> Option<PathBuf>;
+    /// Where to save a file of `kind`, starting from `suggested_name`, or
+    /// `None` when the user cancels.
+    fn save_path(&self, suggested_name: &str, kind: FileKind) -> Option<PathBuf>;
 
     /// Whether the user agrees to lose the changes that are not saved.
     fn discard_changes(&self) -> bool;
+}
+
+/// What kind of file is being saved.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FileKind {
+    /// An OpenCabinet project, `.ocab`.
+    Project,
+    /// A cut list for spreadsheets, `.csv`.
+    CutList,
+}
+
+impl FileKind {
+    fn filter(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Project => ("OpenCabinet project", "ocab"),
+            Self::CutList => ("Cut list for spreadsheets", "csv"),
+        }
+    }
 }
 
 /// The operating system's own dialogs.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SystemDialogs;
 
-const FILTER_NAME: &str = "OpenCabinet project";
-const EXTENSION: &str = "ocab";
-
 impl Dialogs for SystemDialogs {
     fn open_path(&self) -> Option<PathBuf> {
+        let (name, extension) = FileKind::Project.filter();
         FileDialog::new()
             .set_title("Open project")
-            .add_filter(FILTER_NAME, &[EXTENSION])
+            .add_filter(name, &[extension])
             .pick_file()
     }
 
-    fn save_path(&self, suggested_name: &str) -> Option<PathBuf> {
+    fn save_path(&self, suggested_name: &str, kind: FileKind) -> Option<PathBuf> {
+        let (name, extension) = kind.filter();
+        let title = match kind {
+            FileKind::Project => "Save project",
+            FileKind::CutList => "Export cut list",
+        };
         let path = FileDialog::new()
-            .set_title("Save project")
-            .add_filter(FILTER_NAME, &[EXTENSION])
+            .set_title(title)
+            .add_filter(name, &[extension])
             .set_file_name(suggested_name)
             .save_file()?;
         // Some systems do not add the extension the filter shows.
-        Some(if path.extension().is_some_and(|e| e == EXTENSION) {
+        Some(if path.extension().is_some_and(|e| e == extension) {
             path
         } else {
-            path.with_extension(EXTENSION)
+            path.with_extension(extension)
         })
     }
 

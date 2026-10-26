@@ -4,7 +4,6 @@
 //! OpenCabinet Designer's window, as a library so tests can drive it
 //! without a window system (see `tests/window.rs`).
 
-pub mod cut_list;
 pub mod designer;
 pub mod dialogs;
 pub mod perf;
@@ -17,7 +16,8 @@ use opencabinet_model::Units;
 use slint::{CloseRequestResponse, ComponentHandle, ModelRc, StandardListViewItem, VecModel};
 
 use crate::designer::{Designer, Dimension};
-use crate::dialogs::{Dialogs, SystemDialogs};
+use crate::dialogs::{Dialogs, FileKind, SystemDialogs};
+use opencabinet_reports::Separator;
 
 /// The code Slint generates from `ui/app.slint`, which follows Slint's
 /// conventions rather than this workspace's lints.
@@ -75,6 +75,15 @@ pub fn create_with(dialogs: Rc<dyn Dialogs>) -> Result<AppWindow, slint::Platfor
     let handle = Rc::clone(&app);
     window.on_save_project_as(move || {
         handle.save(true);
+    });
+    let handle = Rc::clone(&app);
+    window.on_export_cut_list(move |semicolon| {
+        let separator = if semicolon {
+            Separator::Semicolon
+        } else {
+            Separator::Comma
+        };
+        handle.export_cut_list(separator);
     });
     let handle = Rc::clone(&app);
     window.on_about(move || {
@@ -170,7 +179,7 @@ impl App {
             Some(path) if !ask => path,
             _ => {
                 let suggested = format!("{}.ocab", self.designer.borrow().label());
-                let Some(path) = self.dialogs.save_path(&suggested) else {
+                let Some(path) = self.dialogs.save_path(&suggested, FileKind::Project) else {
                     return false;
                 };
                 path
@@ -190,6 +199,17 @@ impl App {
                 self.status(&message);
                 false
             }
+        }
+    }
+
+    fn export_cut_list(&self, separator: Separator) {
+        let suggested = format!("{} cut list.csv", self.designer.borrow().label());
+        let Some(path) = self.dialogs.save_path(&suggested, FileKind::CutList) else {
+            return;
+        };
+        match self.designer.borrow().export_cut_list(&path, separator) {
+            Ok(()) => self.status(&format!("Exported the cut list to {}", file_name(&path))),
+            Err(message) => self.status(&message),
         }
     }
 

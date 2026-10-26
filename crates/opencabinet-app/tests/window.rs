@@ -15,7 +15,7 @@ use std::rc::Rc;
 
 use i_slint_backend_testing::ElementHandle;
 use opencabinet_app::AppWindow;
-use opencabinet_app::dialogs::Dialogs;
+use opencabinet_app::dialogs::{Dialogs, FileKind};
 use slint::Model;
 
 /// Answers the dialogs from the test, and counts the questions.
@@ -31,8 +31,15 @@ impl Dialogs for Answers {
         self.path.borrow().clone()
     }
 
-    fn save_path(&self, _suggested_name: &str) -> Option<PathBuf> {
-        self.path.borrow().clone()
+    fn save_path(&self, _suggested_name: &str, kind: FileKind) -> Option<PathBuf> {
+        let extension = match kind {
+            FileKind::Project => "ocab",
+            FileKind::CutList => "csv",
+        };
+        self.path
+            .borrow()
+            .as_ref()
+            .map(|p| p.with_extension(extension))
     }
 
     fn discard_changes(&self) -> bool {
@@ -125,6 +132,17 @@ fn the_window_edits_saves_and_reopens_a_project() {
     assert_eq!(window.get_width_text(), "30-1/2\"");
     assert_eq!(window.get_depth_reading(), "≈ 23-5/8\"");
     assert_eq!(window.get_status(), "Opened test-cabinet.ocab");
+
+    // The cut list exports for Excel in Spanish: UTF-8 with a byte order
+    // mark, semicolons between fields.
+    window.invoke_export_cut_list(true);
+    let csv = std::fs::read_to_string(path.with_extension("csv")).unwrap();
+    assert!(csv.starts_with("\u{feff}Product;Part;Material;"), "{csv}");
+    assert_eq!(csv.lines().count(), 10);
+    assert_eq!(
+        window.get_status(),
+        "Exported the cut list to test-cabinet.csv"
+    );
 
     window.invoke_about();
     assert!(window.get_status().contains("GNU GPL"));

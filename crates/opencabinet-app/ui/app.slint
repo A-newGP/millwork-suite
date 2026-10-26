@@ -63,6 +63,8 @@ export component AppWindow inherits Window {
     callback open-project();
     callback save-project();
     callback save-project-as();
+    // `true` for semicolons between fields, as Excel in Spanish expects.
+    callback export-cut-list(semicolon: bool);
     callback about();
     callback quit();
 
@@ -73,6 +75,18 @@ export component AppWindow inherits Window {
             MenuItem { title: "Open…"; activated => { root.open-project(); } }
             MenuItem { title: "Save"; activated => { root.save-project(); } }
             MenuItem { title: "Save as…"; activated => { root.save-project-as(); } }
+            MenuSeparator { }
+            Menu {
+                title: "Export cut list";
+                MenuItem {
+                    title: "CSV with commas…";
+                    activated => { root.export-cut-list(false); }
+                }
+                MenuItem {
+                    title: "CSV with semicolons, for Excel in Spanish…";
+                    activated => { root.export-cut-list(true); }
+                }
+            }
             MenuSeparator { }
             MenuItem { title: "Quit"; activated => { root.quit(); } }
         }
