@@ -29,6 +29,27 @@ pub struct Rules {
     /// Adjustable shelves; needed only by cabinets with shelves.
     #[serde(default)]
     pub shelves: Option<Shelves>,
+    /// Five-piece doors and fronts; needed only by fronts in that style.
+    #[serde(default)]
+    pub five_piece: Option<FivePiece>,
+}
+
+/// Five-piece doors and fronts: two stiles, two rails and a floating panel.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FivePiece {
+    /// The width of the stiles, the vertical members.
+    pub stile_width: Length,
+    /// The width of the rails, the horizontal members.
+    pub rail_width: Length,
+    /// How far each end of a rail reaches into a stile: the sticking depth
+    /// for cope-and-stick, the tenon length for mortise-and-tenon.
+    pub joint_depth: Length,
+    /// How deep the groove that holds the panel is.
+    pub panel_groove_depth: Length,
+    /// How much smaller the panel is than its grooves, in total, so it can
+    /// move with the seasons.
+    pub panel_clearance: Length,
 }
 
 /// Drawer boxes: two sides run the full depth and hold the front and back

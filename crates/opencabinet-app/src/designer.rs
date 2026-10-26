@@ -138,12 +138,13 @@ impl Designer {
     }
 
     /// Makes the cabinet another kind, with that kind's usual height, depth
-    /// and front, and a label that starts with its letter. The width and
-    /// the materials stay.
+    /// and front, and a label that starts with its letter. The width, the
+    /// materials and the style of the fronts stay.
     pub fn set_kind(&mut self, kind: CabinetKind) {
         if self.kind() == Some(kind) {
             return;
         }
+        let five_piece = self.five_piece();
         let product = &mut self.document.project.products[0];
         let (height, depth) = kind.usual_height_and_depth();
         product.product_type = kind.product_type().into();
@@ -156,6 +157,43 @@ impl Designer {
             .skip_while(|c| !c.is_ascii_digit())
             .collect();
         product.label = format!("{}{number}", kind.label_letter());
+        // The new front keeps the style the fronts had.
+        self.set_five_piece(five_piece);
+        self.modified = true;
+    }
+
+    /// Whether the cabinet's fronts are five-piece rather than slabs.
+    #[must_use]
+    pub fn five_piece(&self) -> bool {
+        let mut five_piece = false;
+        if let Some(front) = &self.product().front {
+            visit(front, &mut |insert| {
+                five_piece |= insert.style == Some(FrontStyle::FivePiece);
+            });
+        }
+        five_piece
+    }
+
+    /// Makes every door and drawer front of the cabinet five-piece, or slab.
+    pub fn set_five_piece(&mut self, five_piece: bool) {
+        if self.five_piece() == five_piece {
+            return;
+        }
+        let style = if five_piece {
+            FrontStyle::FivePiece
+        } else {
+            FrontStyle::Slab
+        };
+        if let Some(front) = &mut self.document.project.products[0].front {
+            visit_mut(front, &mut |insert| {
+                if matches!(
+                    insert.kind,
+                    InsertKind::Doors | InsertKind::Drawer | InsertKind::FalseFront
+                ) {
+                    insert.style = Some(style.clone());
+                }
+            });
+        }
         self.modified = true;
     }
 
@@ -289,6 +327,26 @@ impl Designer {
     }
 }
 
+/// Calls `f` with every insert of a front tree.
+fn visit(node: &FrontNode, f: &mut impl FnMut(&Insert)) {
+    if let Some(insert) = &node.insert {
+        f(insert);
+    }
+    for child in &node.children {
+        visit(child, f);
+    }
+}
+
+/// Calls `f` with every insert of a front tree, to change it.
+fn visit_mut(node: &mut FrontNode, f: &mut impl FnMut(&mut Insert)) {
+    if let Some(insert) = &mut node.insert {
+        f(insert);
+    }
+    for child in &mut node.children {
+        visit_mut(child, f);
+    }
+}
+
 /// 1/32" or 0.1 mm, the usual shop precisions.
 fn usual_precision(units: Units) -> Length {
     match units {
@@ -354,6 +412,13 @@ fn starter_library() -> Library {
             "slideLengths": slides,
             "bottomGrooveDepth": inches(1, 4),
         },
+        "fivePiece": {
+            "stileWidth": inches(9, 4),
+            "railWidth": inches(9, 4),
+            "jointDepth": inches(3, 8),
+            "panelGrooveDepth": inches(3, 8),
+            "panelClearance": inches(1, 8),
+        },
         "fronts": { "overlay": "full", "gap": inches(1, 8) },
         "shelves": {
             "sideClearance": inches(1, 16),
@@ -415,6 +480,7 @@ fn base_cabinet(library: &Library) -> Product {
             ("doors", plywood),
             ("drawerBox", box_sides),
             ("drawerBottom", thin),
+            ("frontPanels", thin),
             ("edgeBandCase", band),
             ("edgeBandFronts", band),
         ]
@@ -618,6 +684,27 @@ mod tests {
             4
         );
         assert!(designer.modified());
+    }
+
+    #[test]
+    fn five_piece_fronts_replace_slab_doors_and_drawer_fronts() {
+        let mut designer = Designer::default();
+        assert!(!designer.five_piece());
+        designer.set_five_piece(true);
+        assert!(designer.five_piece());
+        let list = designer.cut_list();
+        assert_eq!(list.problems, Vec::<String>::new());
+        let names: Vec<&str> = list.rows.iter().map(|r| r.part.as_str()).collect();
+        for name in [
+            "Drawer front, top rail",
+            "Door 1, left stile",
+            "Door 2, panel",
+        ] {
+            assert!(names.contains(&name), "{name} in {names:?}");
+        }
+        assert!(!names.contains(&"Door 1"));
+        designer.set_five_piece(false);
+        assert!(designer.cut_list().rows.iter().any(|r| r.part == "Door 1"));
     }
 
     #[test]

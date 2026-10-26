@@ -152,6 +152,15 @@ fn the_window_edits_saves_and_reopens_a_project() {
         "Exported the cut list to test-cabinet.pdf"
     );
 
+    // Five-piece fronts replace the slab ones in the cut list.
+    window.invoke_style_chosen(true);
+    assert_eq!(window.get_style_index(), 1);
+    let parts: Vec<String> = (0..window.get_cut_rows().row_count())
+        .map(|r| cell(r, 1))
+        .collect();
+    assert!(parts.contains(&"Door 1, panel".to_owned()), "{parts:?}");
+    window.invoke_style_chosen(false);
+
     // Choosing another kind of cabinet gives its usual sizes and parts.
     window.invoke_kind_chosen(1);
     assert_eq!(window.get_cabinet_label(), "W1");

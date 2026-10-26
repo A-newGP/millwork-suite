@@ -10,8 +10,9 @@
 //! # What this version evaluates
 //!
 //! Frameless base, wall and tall cabinets (`base-cabinet@1`,
-//! `wall-cabinet@1`, `tall-cabinet@1`) with full-overlay slab doors, drawer
-//! fronts and false fronts, drawer boxes and adjustable shelves. Notation:
+//! `wall-cabinet@1`, `tall-cabinet@1`) with full-overlay slab or five-piece
+//! doors, drawer fronts and false fronts, drawer boxes and adjustable
+//! shelves. Notation:
 //! `W`, `H`, `D` the product's width, height and depth; `T` the actual
 //! thickness of the `case` material; `K` the toe kick height, none for a
 //! wall cabinet; `S` the stretcher width; `G` the front gap; `g` the back
@@ -34,6 +35,14 @@
 //! banded on all four edges; doors run their grain up, drawer and false
 //! fronts across.
 //!
+//! A **five-piece** front (the standard's `fivePiece` rules; the
+//! `frontFrames` and `frontPanels` materials, or the doors') is two stiles
+//! `s` wide the full height of the front, two rails `r` wide between them
+//! that reach `j` into each stile, and a panel in grooves `p` deep, `c`
+//! smaller than its grooves so it can move. For a front `F` wide and `E`
+//! high: rails are `F − 2s + 2j` long, the panel `E − 2r + 2p − c` by
+//! `F − 2s + 2p − c`. Frames are not banded.
+//!
 //! A **drawer box** (from the standard's `drawers` rules, the `drawerBox`
 //! and `drawerBottom` materials, `t` their thickness) is as deep as the
 //! longest stocked slide `L` that fits in `D` less the rear clearance; as
@@ -55,9 +64,8 @@
 //! The cut size of a part is its finished size less the thickness of the
 //! bands on its ends (length) and sides (width).
 //!
-//! Anything else, such as other product types, face frames, five-piece
-//! doors and overrides, makes the product an error rather than giving parts
-//! that would be wrong.
+//! Anything else, such as other product types, face frames and overrides,
+//! makes the product an error rather than giving parts that would be wrong.
 
 pub mod front;
 pub mod rules;
@@ -373,12 +381,10 @@ impl Cabinet<'_, '_> {
     /// The parts an opening's insert produces.
     fn insert(&self, opening: &Opening<'_>, parts: &mut Vec<Part>) -> Result<(), String> {
         let insert = opening.insert;
-        if matches!(
-            insert.style,
-            Some(FrontStyle::FivePiece | FrontStyle::Other(_))
-        ) {
-            return Err("only slab fronts can be evaluated yet".into());
+        if let Some(FrontStyle::Other(style)) = &insert.style {
+            return Err(format!("unknown front style `{style}`"));
         }
+        let five_piece = insert.style == Some(FrontStyle::FivePiece);
         let prefix = format!("front/{}", opening.node.id);
         let gap = self.rules.fronts.gap;
         match &insert.kind {
@@ -398,12 +404,16 @@ impl Cabinet<'_, '_> {
                     .inset(gap);
                     x += width;
                     let key = format!("{prefix}/door.{}", i + 1);
-                    // Doors run their grain up.
-                    let (length, width) = (door.height, door.width);
-                    parts.push(
-                        self.maker
-                            .part(&key, "door", material, length, width, self.fronts),
-                    );
+                    if five_piece {
+                        self.five_piece(&key, door, parts)?;
+                    } else {
+                        // Slab doors run their grain up.
+                        let (length, width) = (door.height, door.width);
+                        let part =
+                            self.maker
+                                .part(&key, "door", material, length, width, self.fronts);
+                        parts.push(part);
+                    }
                 }
                 self.shelves(&prefix, insert.shelves, parts)?;
             }
@@ -415,12 +425,16 @@ impl Cabinet<'_, '_> {
                 } else {
                     (format!("{prefix}/falseFront"), "falseFront")
                 };
-                // Drawer and false fronts run their grain across.
-                let (length, width) = (front.width, front.height);
-                parts.push(
-                    self.maker
-                        .part(&key, role, material, length, width, self.fronts),
-                );
+                if five_piece {
+                    self.five_piece(&key, front, parts)?;
+                } else {
+                    // Slab drawer and false fronts run their grain across.
+                    let (length, width) = (front.width, front.height);
+                    let part = self
+                        .maker
+                        .part(&key, role, material, length, width, self.fronts);
+                    parts.push(part);
+                }
                 if insert.kind == InsertKind::Drawer {
                     self.drawer_box(&prefix, opening.rect.height, parts)?;
                 }
@@ -433,6 +447,64 @@ impl Cabinet<'_, '_> {
                 ));
             }
         }
+        Ok(())
+    }
+
+    /// A five-piece front the size of `front`: two stiles the full height,
+    /// two rails between them reaching into the stiles by the joint depth,
+    /// and a panel that floats in grooves. The frame is not banded.
+    fn five_piece(&self, key: &str, front: Rect, parts: &mut Vec<Part>) -> Result<(), String> {
+        let rules = self
+            .rules
+            .five_piece
+            .as_ref()
+            .ok_or("the standard has no `fivePiece` rules")?;
+        let frame = self.lookup.material_or("frontFrames", "doors")?;
+        let panel = self.lookup.material_or("frontPanels", "doors")?;
+        let (stile, rail) = (rules.stile_width, rules.rail_width);
+        let between = front.width - stile * 2;
+        let panel_height = front.height - rail * 2;
+        if between <= Length::ZERO || panel_height <= Length::ZERO {
+            return Err("the front is too small for a five-piece frame".into());
+        }
+        let g = rules.panel_groove_depth;
+        let float = rules.panel_clearance;
+        let part = |name: &str, role, material, length, width| {
+            self.maker.part(
+                &format!("{key}/{name}"),
+                role,
+                material,
+                length,
+                width,
+                BARE,
+            )
+        };
+        parts.extend([
+            // Stiles run their grain up, rails across, the panel up.
+            part("stile.left", "stile", frame, front.height, stile),
+            part("stile.right", "stile", frame, front.height, stile),
+            part(
+                "rail.top",
+                "rail",
+                frame,
+                between + rules.joint_depth * 2,
+                rail,
+            ),
+            part(
+                "rail.bottom",
+                "rail",
+                frame,
+                between + rules.joint_depth * 2,
+                rail,
+            ),
+            part(
+                "panel",
+                "panel",
+                panel,
+                panel_height + g * 2 - float,
+                between + g * 2 - float,
+            ),
+        ]);
         Ok(())
     }
 

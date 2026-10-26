@@ -26,8 +26,8 @@ fn read<T: DeserializeOwned>(path: &str) -> T {
     serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap()
 }
 
-/// The sample kitchen, with the B30's five-piece doors, which are not
-/// evaluated yet, made slabs.
+/// The sample kitchen, with the B30's five-piece doors made slabs, so the
+/// tests of slab fronts and of the case read simple sizes.
 fn kitchen_with_slab_doors() -> (Project, Library) {
     let mut project: Project = read("project.json");
     let front = project.products[0].front.as_mut().unwrap();
@@ -132,6 +132,28 @@ fn the_drawer_box_matches_the_sizes_worked_out_by_hand() {
 }
 
 #[test]
+fn five_piece_doors_match_the_sizes_worked_out_by_hand() {
+    // The sample's B30 as it is: five-piece doors 619.125 × 377.825 mm, with
+    // 2-1/4" stiles and rails, rails reaching 3/8" into the stiles, a 3/8"
+    // panel groove and 1/8" of play for the panel; frames of the doors'
+    // 18 mm maple, panels of 12 mm birch, none of them banded.
+    let project: Project = read("project.json");
+    let library: Library = read("library.json");
+    assert_eq!(
+        b30(&project, &library, "front/403/door.1/"),
+        [
+            "front/403/door.1/stile.left: 619.125 × 57.15 × 18, cut 619.125 × 57.15",
+            "front/403/door.1/stile.right: 619.125 × 57.15 × 18, cut 619.125 × 57.15",
+            // 377.825 − 2 × 57.15 + 2 × 9.525.
+            "front/403/door.1/rail.top: 282.575 × 57.15 × 18, cut 282.575 × 57.15",
+            "front/403/door.1/rail.bottom: 282.575 × 57.15 × 18, cut 282.575 × 57.15",
+            // 619.125 − 114.3 + 19.05 − 3.175 by 377.825 − 114.3 + 19.05 − 3.175.
+            "front/403/door.1/panel: 520.7 × 279.4 × 12, cut 520.7 × 279.4",
+        ]
+    );
+}
+
+#[test]
 fn shelves_span_the_inside_less_their_clearances() {
     let (mut project, library) = kitchen_with_slab_doors();
     let front = project.products[0].front.as_mut().unwrap();
@@ -217,7 +239,7 @@ fn what_cannot_be_evaluated_yet_is_reported_not_guessed() {
     assert_eq!(
         problems,
         [
-            "error: B30: only slab fronts can be evaluated yet",
+            "note: B30: no edge band chosen for `edgeBandCase`; those edges are left bare",
             "error: SB36: product type `sink-base@1` cannot be evaluated yet",
             "error: BC42: product type `blind-corner-base@1` cannot be evaluated yet",
             "error: W30: face frame cabinets cannot be evaluated yet",

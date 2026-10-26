@@ -41,6 +41,8 @@ export component AppWindow inherits Window {
     // The kinds of cabinet offered, and which one is being edited.
     in property <[string]> kinds;
     in-out property <int> kind-index;
+    // 0 for slab fronts, 1 for five-piece.
+    in-out property <int> style-index;
     in property <string> status;
     in-out property <string> width-text;
     in-out property <string> height-text;
@@ -63,6 +65,7 @@ export component AppWindow inherits Window {
     callback depth-edited(text: string);
     callback units-chosen(metric: bool);
     callback kind-chosen(index: int);
+    callback style-chosen(five-piece: bool);
     callback new-project();
     callback open-project();
     callback save-project();
@@ -136,6 +139,13 @@ export component AppWindow inherits Window {
                     model: root.kinds;
                     current-index <=> root.kind-index;
                     selected => { root.kind-chosen(self.current-index); }
+                }
+                Text { text: "Doors and fronts"; }
+                ComboBox {
+                    accessible-label: "Doors and fronts";
+                    model: ["Slab", "Five-piece"];
+                    current-index <=> root.style-index;
+                    selected => { root.style-chosen(self.current-index == 1); }
                 }
                 LengthField {
                     label: "Width";
