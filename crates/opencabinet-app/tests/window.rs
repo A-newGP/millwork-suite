@@ -67,20 +67,18 @@ fn the_window_edits_saves_and_reopens_a_project() {
         1
     );
 
-    // The cut list shows the starter cabinet's nine parts.
+    // The cut list shows the starter cabinet's fourteen parts, drawer box
+    // included, with nothing left out.
     let cell = |row: usize, column: usize| {
         let row = window.get_cut_rows().row_data(row).unwrap();
         row.row_data(column).unwrap().text.to_string()
     };
-    assert_eq!(window.get_cut_rows().row_count(), 9);
+    assert_eq!(window.get_cut_rows().row_count(), 14);
     assert_eq!(
         (cell(2, 1), cell(2, 4)),
         ("Bottom".into(), "28-19/32\"".into())
     );
-    assert_eq!(
-        window.get_cut_problems(),
-        "B1, note: drawer boxes are not evaluated yet"
-    );
+    assert_eq!(window.get_cut_problems(), "");
 
     // Shop notation is read exactly and shown back in lowest terms.
     field(&window, "Width").set_accessible_value("30 1/2");
@@ -139,7 +137,7 @@ fn the_window_edits_saves_and_reopens_a_project() {
     window.invoke_export_cut_list(true);
     let csv = std::fs::read_to_string(path.with_extension("csv")).unwrap();
     assert!(csv.starts_with("\u{feff}Product;Part;Material;"), "{csv}");
-    assert_eq!(csv.lines().count(), 10);
+    assert_eq!(csv.lines().count(), 15);
     assert_eq!(
         window.get_status(),
         "Exported the cut list to test-cabinet.csv"

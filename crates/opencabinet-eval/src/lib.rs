@@ -10,7 +10,7 @@
 //! # What this version evaluates
 //!
 //! Frameless base cabinets (`base-cabinet@1`) with full-overlay slab doors,
-//! drawer fronts and false fronts. Notation: `W`, `H`, `D` the product's
+//! drawer fronts and false fronts, drawer boxes and adjustable shelves. Notation: `W`, `H`, `D` the product's
 //! width, height and depth; `T` the actual thickness of the `case`
 //! material; `K` the toe kick height; `S` the stretcher width; `G` the
 //! front gap; `g` the back groove depth. The box height is `Hb = H − K`.
@@ -30,12 +30,30 @@
 //! banded on all four edges; doors run their grain up, drawer and false
 //! fronts across.
 //!
+//! A **drawer box** (from the standard's `drawers` rules, the `drawerBox`
+//! and `drawerBottom` materials, `t` their thickness) is as deep as the
+//! longest stocked slide `L` that fits in `D` less the rear clearance; as
+//! high as its opening less the vertical clearance `v`; and as wide as the
+//! inside less the slide clearance `c` on each side. The sides run the full
+//! depth and hold the front and back; the bottom sits in grooves `b` deep:
+//!
+//! | Part | Length × width |
+//! | --- | --- |
+//! | `…/drawer/box.side.left`, `.right` | `L` × `opening − v` |
+//! | `…/drawer/box.front`, `.back` | `W − 2T − 2c − 2t` × `opening − v` |
+//! | `…/drawer/box.bottom` | `W − 2T − 2c − 2t + 2b` × `L − 2t + 2b` |
+//!
+//! **Shelves** of an open section or behind doors (the `shelves` rules,
+//! the `shelves` material, or the case's) span the inside: `W − 2T` less
+//! the side clearance, by `D` less the front setback and the back
+//! allowance, banded in front like the case.
+//!
 //! The cut size of a part is its finished size less the thickness of the
 //! bands on its ends (length) and sides (width).
 //!
 //! Anything else, such as other product types, face frames, five-piece
-//! doors, drawer boxes, shelves and overrides, makes the product an error
-//! rather than giving parts that would be wrong.
+//! doors and overrides, makes the product an error rather than giving parts
+//! that would be wrong.
 
 pub mod front;
 pub mod rules;
@@ -235,16 +253,17 @@ pub fn evaluate_product(
             width: w,
             height: box_height,
         };
-        let fronts = banded(front_band, &[0, 1, 2, 3]);
+        let cabinet = Cabinet {
+            lookup: &lookup,
+            maker: &maker,
+            rules: &rules,
+            inner_width,
+            depth: d,
+            fronts: banded(front_band, &[0, 1, 2, 3]),
+            shelf_front: front_edge,
+        };
         for opening in openings(root, face)? {
-            fronts_of(
-                &lookup,
-                &maker,
-                &opening,
-                rules.fronts.gap,
-                fronts,
-                &mut parts,
-            )?;
+            cabinet.insert(&opening, &mut parts)?;
         }
     }
     Ok(Evaluated {
@@ -253,71 +272,170 @@ pub fn evaluate_product(
     })
 }
 
-/// The fronts an opening's insert produces.
-fn fronts_of(
-    lookup: &Lookup<'_>,
-    maker: &PartMaker<'_>,
-    opening: &Opening<'_>,
-    gap: Length,
-    edges: Bands<'_>,
-    parts: &mut Vec<Part>,
-) -> Result<(), String> {
-    let insert = opening.insert;
-    if matches!(
-        insert.style,
-        Some(FrontStyle::FivePiece | FrontStyle::Other(_))
-    ) {
-        return Err("only slab fronts can be evaluated yet".into());
-    }
-    let prefix = format!("front/{}", opening.node.id);
-    match &insert.kind {
-        InsertKind::Doors => {
-            let material = lookup.material("doors")?;
-            let count = u32::from(insert.count.unwrap_or(1));
-            if !(1..=2).contains(&count) {
-                return Err("an opening takes one or two doors".into());
-            }
-            let mut x = opening.rect.x;
-            for (i, width) in opening.rect.width.split(count).into_iter().enumerate() {
-                let door = Rect {
-                    x,
-                    width,
-                    ..opening.rect
+/// What the parts of a front's inserts depend on.
+struct Cabinet<'c, 'p> {
+    lookup: &'c Lookup<'p>,
+    maker: &'c PartMaker<'p>,
+    rules: &'c Rules,
+    /// Between the sides.
+    inner_width: Length,
+    depth: Length,
+    /// The bands on a front's four edges.
+    fronts: Bands<'p>,
+    /// The band on a shelf's front edge.
+    shelf_front: Bands<'p>,
+}
+
+impl Cabinet<'_, '_> {
+    /// The parts an opening's insert produces.
+    fn insert(&self, opening: &Opening<'_>, parts: &mut Vec<Part>) -> Result<(), String> {
+        let insert = opening.insert;
+        if matches!(
+            insert.style,
+            Some(FrontStyle::FivePiece | FrontStyle::Other(_))
+        ) {
+            return Err("only slab fronts can be evaluated yet".into());
+        }
+        let prefix = format!("front/{}", opening.node.id);
+        let gap = self.rules.fronts.gap;
+        match &insert.kind {
+            InsertKind::Doors => {
+                let material = self.lookup.material("doors")?;
+                let count = u32::from(insert.count.unwrap_or(1));
+                if !(1..=2).contains(&count) {
+                    return Err("an opening takes one or two doors".into());
                 }
-                .inset(gap);
-                x += width;
-                let key = format!("{prefix}/door.{}", i + 1);
-                // Doors run their grain up.
-                parts.push(maker.part(&key, "door", material, door.height, door.width, edges));
+                let mut x = opening.rect.x;
+                for (i, width) in opening.rect.width.split(count).into_iter().enumerate() {
+                    let door = Rect {
+                        x,
+                        width,
+                        ..opening.rect
+                    }
+                    .inset(gap);
+                    x += width;
+                    let key = format!("{prefix}/door.{}", i + 1);
+                    // Doors run their grain up.
+                    let (length, width) = (door.height, door.width);
+                    parts.push(
+                        self.maker
+                            .part(&key, "door", material, length, width, self.fronts),
+                    );
+                }
+                self.shelves(&prefix, insert.shelves, parts)?;
+            }
+            InsertKind::Drawer | InsertKind::FalseFront => {
+                let material = self.lookup.material_or("drawerFronts", "doors")?;
+                let front = opening.rect.inset(gap);
+                let (key, role) = if insert.kind == InsertKind::Drawer {
+                    (format!("{prefix}/drawer/front"), "drawerFront")
+                } else {
+                    (format!("{prefix}/falseFront"), "falseFront")
+                };
+                // Drawer and false fronts run their grain across.
+                let (length, width) = (front.width, front.height);
+                parts.push(
+                    self.maker
+                        .part(&key, role, material, length, width, self.fronts),
+                );
+                if insert.kind == InsertKind::Drawer {
+                    self.drawer_box(&prefix, opening.rect.height, parts)?;
+                }
+            }
+            InsertKind::Open => self.shelves(&prefix, insert.shelves, parts)?,
+            InsertKind::Appliance | InsertKind::None => {}
+            InsertKind::Other(kind) => {
+                return Err(format!(
+                    "unknown insert `{kind}`; open with a newer OpenCabinet"
+                ));
             }
         }
-        InsertKind::Drawer | InsertKind::FalseFront => {
-            let material = lookup.material_or("drawerFronts", "doors")?;
-            let front = opening.rect.inset(gap);
-            let (key, role) = if insert.kind == InsertKind::Drawer {
-                (format!("{prefix}/drawer/front"), "drawerFront")
-            } else {
-                (format!("{prefix}/falseFront"), "falseFront")
-            };
-            // Drawer and false fronts run their grain across.
-            parts.push(maker.part(&key, role, material, front.width, front.height, edges));
-            if insert.kind == InsertKind::Drawer {
-                lookup.note("drawer boxes are not evaluated yet");
-            }
-        }
-        InsertKind::Open => {
-            if insert.shelves.unwrap_or(0) > 0 {
-                return Err("shelves cannot be evaluated yet".into());
-            }
-        }
-        InsertKind::Appliance | InsertKind::None => {}
-        InsertKind::Other(kind) => {
-            return Err(format!(
-                "unknown insert `{kind}`; open with a newer OpenCabinet"
-            ));
-        }
+        Ok(())
     }
-    Ok(())
+
+    /// The box of a drawer whose opening is `opening_height` tall: sides
+    /// the full depth, front and back between them, and the bottom in a
+    /// groove in all four.
+    fn drawer_box(
+        &self,
+        prefix: &str,
+        opening_height: Length,
+        parts: &mut Vec<Part>,
+    ) -> Result<(), String> {
+        let rules = self
+            .rules
+            .drawers
+            .as_ref()
+            .ok_or("the standard has no `drawers` rules")?;
+        let sides = self.lookup.material("drawerBox")?;
+        let bottom = self.lookup.material("drawerBottom")?;
+        let t = sides.actual_thickness;
+        let room = self.depth - rules.rear_clearance;
+        let depth = rules
+            .slide_lengths
+            .iter()
+            .copied()
+            .filter(|&l| l <= room)
+            .max()
+            .ok_or("no slide in the standard is short enough for this cabinet")?;
+        let height = opening_height - rules.vertical_clearance;
+        let width = self.inner_width - rules.side_clearance * 2;
+        let between = width - t * 2;
+        if height <= Length::ZERO || between <= Length::ZERO {
+            return Err("the drawer opening is too small for a drawer box".into());
+        }
+        let g = rules.bottom_groove_depth;
+        let part = |name: &str, role, material, length, width| {
+            let key = format!("{prefix}/drawer/box.{name}");
+            self.maker.part(&key, role, material, length, width, BARE)
+        };
+        parts.extend([
+            part("side.left", "drawerSide", sides, depth, height),
+            part("side.right", "drawerSide", sides, depth, height),
+            part("front", "drawerSubFront", sides, between, height),
+            part("back", "drawerBack", sides, between, height),
+            part(
+                "bottom",
+                "drawerBottom",
+                bottom,
+                between + g * 2,
+                depth - t * 2 + g * 2,
+            ),
+        ]);
+        Ok(())
+    }
+
+    /// `count` adjustable shelves across the cabinet's inside.
+    fn shelves(
+        &self,
+        prefix: &str,
+        count: Option<u8>,
+        parts: &mut Vec<Part>,
+    ) -> Result<(), String> {
+        let count = count.unwrap_or(0);
+        if count == 0 {
+            return Ok(());
+        }
+        let rules = self
+            .rules
+            .shelves
+            .as_ref()
+            .ok_or("the standard has no `shelves` rules")?;
+        let material = self.lookup.material_or("shelves", "case")?;
+        let length = self.inner_width - rules.side_clearance;
+        let width = self.depth - rules.front_setback - rules.back_allowance;
+        if length <= Length::ZERO || width <= Length::ZERO {
+            return Err("the cabinet is too small for its shelves".into());
+        }
+        for i in 1..=count {
+            let key = format!("{prefix}/shelf.{i}");
+            let part = self
+                .maker
+                .part(&key, "shelf", material, length, width, self.shelf_front);
+            parts.push(part);
+        }
+        Ok(())
+    }
 }
 
 /// Finds the library items a product's material roles point to.

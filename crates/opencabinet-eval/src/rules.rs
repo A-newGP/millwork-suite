@@ -23,6 +23,42 @@ pub struct Rules {
     pub back: Back,
     /// Doors and drawer fronts.
     pub fronts: Fronts,
+    /// Drawer boxes; needed only by cabinets with drawers.
+    #[serde(default)]
+    pub drawers: Option<Drawers>,
+    /// Adjustable shelves; needed only by cabinets with shelves.
+    #[serde(default)]
+    pub shelves: Option<Shelves>,
+}
+
+/// Drawer boxes: two sides run the full depth and hold the front and back
+/// between them; the bottom sits in a groove in all four.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Drawers {
+    /// The room the slide needs on each side of the box.
+    pub side_clearance: Length,
+    /// How much lower the box is than its opening.
+    pub vertical_clearance: Length,
+    /// The room left behind the box at the back of the cabinet.
+    pub rear_clearance: Length,
+    /// The slide lengths the shop stocks; the box is as deep as the longest
+    /// one that fits.
+    pub slide_lengths: Vec<Length>,
+    /// How deep the bottom's groove is.
+    pub bottom_groove_depth: Length,
+}
+
+/// Adjustable shelves, which span the cabinet's inside width.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Shelves {
+    /// How much narrower than the inside a shelf is, in total.
+    pub side_clearance: Length,
+    /// How far back from the front edge of the case a shelf starts.
+    pub front_setback: Length,
+    /// The depth the back takes, which a shelf stops short of.
+    pub back_allowance: Length,
 }
 
 /// The toe kick. The box stands on a separate base of this height, which
