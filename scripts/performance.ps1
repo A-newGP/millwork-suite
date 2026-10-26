@@ -13,14 +13,17 @@ budget, or when it is more than 30% worse than the base by more than a small
 absolute margin that keeps run-to-run noise from failing a change.
 Memory is gated on Windows only: on Linux the virtual display inflates it.
 Prints a Markdown table, also appended to the GitHub job summary, and exits
-with 1 when a measure fails.
+with 1 when a measure fails, unless -Accepted is given: a maintainer has
+accepted the cost with the performance-accepted label, and the table records
+it instead.
 #>
 param(
     [Parameter(Mandatory)] [string] $HeadApp,
     [Parameter(Mandatory)] [string] $HeadEdit,
     [string] $BaseApp,
     [string] $BaseEdit,
-    [int] $Runs = 7
+    [int] $Runs = 7,
+    [switch] $Accepted
 )
 
 $ErrorActionPreference = 'Stop'
@@ -117,6 +120,7 @@ foreach ($measure in $Measures) {
         $problems += 'more than 30% worse than the base'
     }
     $result = if (-not $problems) { 'ok' }
+              elseif ($measure.Gated -and $Accepted) { 'ACCEPTED: ' + ($problems -join ', ') }
               elseif ($measure.Gated) { $failed = $true; 'FAIL: ' + ($problems -join ', ') }
               else { 'not gated: ' + ($problems -join ', ') }
     $number = "N$($measure.Digits)"
@@ -126,6 +130,9 @@ foreach ($measure in $Measures) {
 }
 $lines += ''
 $lines += "Medians of $Runs runs ($(if ($IsWindows) { 'Windows' } else { 'Linux' }))."
+if ($Accepted) {
+    $lines += 'A maintainer accepted this cost with the `performance-accepted` label.'
+}
 
 $lines | Write-Output
 if ($env:GITHUB_STEP_SUMMARY) { $lines | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY }

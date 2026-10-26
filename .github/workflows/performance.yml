@@ -3,11 +3,17 @@
 
 # Measures each pull request against the performance budgets of ADR-0014
 # and against the branch it targets, built and run on the same machine.
+#
+# A maintainer who decides a cost is worth it adds the performance-accepted
+# label: the measures are still reported, marked as accepted, but no longer
+# fail the check. The label is the record of that decision.
 
 name: Performance
 
 on:
   pull_request:
+    # Also when the label is added or removed.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
       - crates/**
       - Cargo.lock
@@ -75,9 +81,12 @@ jobs:
             cp "$CARGO_TARGET_DIR/release/examples/perf_edit$EXE" "$GITHUB_WORKSPACE/perf/base/"
           fi
       - name: Measure
+        env:
+          ACCEPTED: ${{ contains(github.event.pull_request.labels.*.name, 'performance-accepted') }}
         run: |
           args=(-HeadApp "perf/head/opencabinet$EXE" -HeadEdit "perf/head/perf_edit$EXE"
                 -BaseApp "perf/base/opencabinet$EXE" -BaseEdit "perf/base/perf_edit$EXE")
+          [[ "$ACCEPTED" == "true" ]] && args+=(-Accepted)
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             xvfb-run -a -s "-screen 0 1920x1080x24" pwsh -NoProfile -File scripts/performance.ps1 "${args[@]}"
           else
