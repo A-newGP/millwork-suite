@@ -90,6 +90,13 @@
           ],
           "verticalClearance": 38100000
         },
+        "fivePiece": {
+          "jointDepth": 9525000,
+          "panelClearance": 3175000,
+          "panelGrooveDepth": 9525000,
+          "railWidth": 57150000,
+          "stileWidth": 57150000
+        },
         "fronts": {
           "gap": 3175000,
           "overlay": "full"

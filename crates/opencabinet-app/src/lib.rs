@@ -73,6 +73,8 @@ pub fn create_with(dialogs: Rc<dyn Dialogs>) -> Result<AppWindow, slint::Platfor
     let handle = Rc::clone(&app);
     window.on_kind_chosen(move |index| handle.choose_kind(index));
     let handle = Rc::clone(&app);
+    window.on_style_chosen(move |five_piece| handle.choose_style(five_piece));
+    let handle = Rc::clone(&app);
     window.on_new_project(move || handle.new_project());
     let handle = Rc::clone(&app);
     window.on_open_project(move || handle.open());
@@ -164,6 +166,14 @@ impl App {
         self.designer.borrow_mut().set_kind(kind);
         clear_errors(&window);
         self.show(&window, true);
+    }
+
+    fn choose_style(&self, five_piece: bool) {
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
+        self.designer.borrow_mut().set_five_piece(five_piece);
+        self.show(&window, false);
     }
 
     fn new_project(&self) {
@@ -308,6 +318,7 @@ impl App {
             .kind()
             .and_then(|k| CabinetKind::ALL.iter().position(|&c| c == k));
         window.set_kind_index(kind.and_then(|i| i32::try_from(i).ok()).unwrap_or(-1));
+        window.set_style_index(i32::from(designer.five_piece()));
         let metric = designer.units() == Units::Metric;
         window.set_metric(metric);
         let units = if metric { "millimeters" } else { "inches" };

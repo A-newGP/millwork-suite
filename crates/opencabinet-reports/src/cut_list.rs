@@ -130,7 +130,26 @@ pub fn cut_list(project: &Project, library: &Library, units: Units, precision: L
 
 /// A name for people: "Left side", "Front stretcher", "Door 2".
 fn part_name(part: &Part) -> String {
-    let last = part.key.rsplit('/').next().unwrap_or_default();
+    let mut segments = part.key.rsplit('/');
+    let last = segments.next().unwrap_or_default();
+    if matches!(part.role, "stile" | "rail" | "panel") {
+        // A member of a five-piece front, named after its front.
+        let front = match segments.next().unwrap_or_default() {
+            door if door.starts_with("door.") => {
+                format!("Door {}", door.trim_start_matches("door."))
+            }
+            "falseFront" => "False front".into(),
+            _ => "Drawer front".into(),
+        };
+        let member = match last {
+            "stile.left" => "left stile",
+            "stile.right" => "right stile",
+            "rail.top" => "top rail",
+            "rail.bottom" => "bottom rail",
+            _ => "panel",
+        };
+        return format!("{front}, {member}");
+    }
     match (part.role, last) {
         ("side", "side.left") => "Left side".into(),
         ("side", "side.right") => "Right side".into(),
