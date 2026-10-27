@@ -3,9 +3,10 @@
 
 """Audits every DXF in a folder with ezdxf, an independent reader (ADR-0015).
 
-Usage: python -I check-dxf.py <folder>. Each file must be DXF 2000 in
-millimeters and pass the audit with no errors and nothing to repair. Prints
-a Markdown table and exits non-zero on any failure.
+Usage: python -I check-dxf.py <folder> [layer]. Each file must be DXF 2000
+in millimeters, have the layer (OUTLINE for parts, WALL for elevations), and
+pass the audit with no errors and nothing to repair. Prints a Markdown
+table and exits non-zero on any failure.
 """
 
 import sys
@@ -17,6 +18,7 @@ import ezdxf
 MILLIMETERS = 4
 
 folder = Path(sys.argv[1])
+required = sys.argv[2] if len(sys.argv) > 2 else "OUTLINE"
 files = sorted(folder.glob("*.dxf"))
 failures = []
 if not files:
@@ -35,8 +37,8 @@ for path in files:
         failures.append(f"{path.name}: version {doc.dxfversion}, not DXF 2000")
     if doc.units != MILLIMETERS:
         failures.append(f"{path.name}: units {doc.units}, not millimeters")
-    if "OUTLINE" not in doc.layers:
-        failures.append(f"{path.name}: no OUTLINE layer")
+    if required not in doc.layers:
+        failures.append(f"{path.name}: no {required} layer")
     for entry in auditor.errors:
         failures.append(f"{path.name}: error: {entry.message}")
     for entry in auditor.fixes:

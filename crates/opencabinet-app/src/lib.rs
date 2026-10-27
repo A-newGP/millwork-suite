@@ -119,6 +119,10 @@ pub fn create_with(dialogs: Rc<dyn Dialogs>) -> Result<AppWindow, slint::Platfor
     let handle = Rc::clone(&app);
     window.on_export_parts_dxf(move || handle.export_parts_dxf());
     let handle = Rc::clone(&app);
+    window.on_export_elevations_pdf(move || handle.export_elevations_pdf());
+    let handle = Rc::clone(&app);
+    window.on_export_elevations_dxf(move || handle.export_elevations_dxf());
+    let handle = Rc::clone(&app);
     window.on_about(move || {
         handle.status(&format!(
             "{NAME_AND_VERSION} — free software under the GNU GPL, version 3 or later"
@@ -319,12 +323,44 @@ impl App {
     }
 
     fn export_parts_dxf(&self) {
-        let Some(folder) = self.dialogs.dxf_folder() else {
+        let Some(folder) = self.dialogs.folder("Export parts as DXF: choose a folder") else {
             return;
         };
         match self.designer.borrow().export_parts_dxf(&folder) {
             Ok(parts) => self.status(&format!(
                 "Exported {parts} parts as DXF to {}",
+                file_name(&folder)
+            )),
+            Err(message) => self.status(&message),
+        }
+    }
+
+    fn export_elevations_pdf(&self) {
+        let fonts = match fonts::load() {
+            Ok(fonts) => fonts,
+            Err(message) => return self.status(&message),
+        };
+        let suggested = format!("{} elevations.pdf", self.designer.borrow().project_name());
+        let Some(path) = self.dialogs.save_path(&suggested, FileKind::ElevationsPdf) else {
+            return;
+        };
+        match self.designer.borrow().export_elevations_pdf(&path, &fonts) {
+            Ok(()) => self.status(&format!("Exported the elevations to {}", file_name(&path))),
+            Err(message) => self.status(&message),
+        }
+    }
+
+    fn export_elevations_dxf(&self) {
+        let Some(folder) = self
+            .dialogs
+            .folder("Export elevations as DXF: choose a folder")
+        else {
+            return;
+        };
+        match self.designer.borrow().export_elevations_dxf(&folder) {
+            Ok(walls) => self.status(&format!(
+                "Exported the elevations of {walls} {} as DXF to {}",
+                if walls == 1 { "wall" } else { "walls" },
                 file_name(&folder)
             )),
             Err(message) => self.status(&message),

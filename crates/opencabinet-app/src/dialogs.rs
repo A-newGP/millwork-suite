@@ -19,9 +19,9 @@ pub trait Dialogs {
     /// `None` when the user cancels.
     fn save_path(&self, suggested_name: &str, kind: FileKind) -> Option<PathBuf>;
 
-    /// The folder to export the parts' DXF files into, or `None` when the
-    /// user cancels.
-    fn dxf_folder(&self) -> Option<PathBuf>;
+    /// The folder to export files into, asked with `title`, or `None` when
+    /// the user cancels.
+    fn folder(&self, title: &str) -> Option<PathBuf>;
 
     /// Whether the user agrees to lose the changes that are not saved.
     fn discard_changes(&self) -> bool;
@@ -36,6 +36,8 @@ pub enum FileKind {
     CutList,
     /// A cut list to print, `.pdf`.
     CutListPdf,
+    /// The walls' elevations to print, `.pdf`.
+    ElevationsPdf,
 }
 
 impl FileKind {
@@ -43,7 +45,7 @@ impl FileKind {
         match self {
             Self::Project => ("OpenCabinet project", "ocab"),
             Self::CutList => ("Cut list for spreadsheets", "csv"),
-            Self::CutListPdf => ("PDF document", "pdf"),
+            Self::CutListPdf | Self::ElevationsPdf => ("PDF document", "pdf"),
         }
     }
 }
@@ -66,6 +68,7 @@ impl Dialogs for SystemDialogs {
         let title = match kind {
             FileKind::Project => "Save project",
             FileKind::CutList | FileKind::CutListPdf => "Export cut list",
+            FileKind::ElevationsPdf => "Export elevations",
         };
         let path = FileDialog::new()
             .set_title(title)
@@ -80,10 +83,8 @@ impl Dialogs for SystemDialogs {
         })
     }
 
-    fn dxf_folder(&self) -> Option<PathBuf> {
-        FileDialog::new()
-            .set_title("Export parts as DXF: choose a folder")
-            .pick_folder()
+    fn folder(&self, title: &str) -> Option<PathBuf> {
+        FileDialog::new().set_title(title).pick_folder()
     }
 
     fn discard_changes(&self) -> bool {
