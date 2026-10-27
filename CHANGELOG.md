@@ -20,6 +20,19 @@ follow [Semantic Versioning](https://semver.org/).
   every banded edge plus an allowance for trimming; and the hinges, drawer
   slides and shelf pins the cabinets use. Standards gain the
   `billOfMaterials` rules for the waste and the allowance.
+- **Blind corner cabinets** (`blind-corner-base@1`,
+  `blind-corner-wall@1`), frameless and face frame: the part of the front
+  hidden by the adjoining cabinet, `blindWidth` from its `blindSide`, takes
+  a fixed blind panel made like a slab door, and nothing that opens reaches
+  into it. Face frames gain a mullion beside the panel. Doors hinge away
+  from the blind side unless they say otherwise. Elevations warn when the
+  cabinet on the adjoining wall leaves part of the blind panel in view or
+  stands in front of the doors.
+
+### Known limitations
+
+- The window cannot create blind corner cabinets yet, nor change their
+  blind side and width; drawers in them are not supported.
 
 ## [0.1.0-beta.1] - 2026-10-26
 

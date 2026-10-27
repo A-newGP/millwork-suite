@@ -1255,7 +1255,12 @@ mod tests {
         assert_eq!(labels.iter().filter(|&&l| l == "30\"").count(), 4);
         assert!(labels.contains(&"144\""), "{labels:?}");
         assert!(!drawing.highlight.is_empty() && !drawing.marks.is_empty());
-        assert_eq!(designer.placement_problems(), Vec::<String>::new());
+        // The BC42 stops short of the corner, with nothing in front of its
+        // blind part.
+        assert_eq!(
+            designer.placement_problems(),
+            ["BC42's blind panel shows: no cabinet stands in front of all of it"]
+        );
 
         // The island stands free, not on a wall: it is drawn alone.
         designer.select(4);

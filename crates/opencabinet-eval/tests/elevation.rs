@@ -76,7 +76,7 @@ fn a_wall_shows_its_openings_and_the_products_on_it() {
     // Products of types that cannot be evaluated yet show their outline
     // only.
     let views: Vec<bool> = north.cabinets.iter().map(|c| c.view.is_some()).collect();
-    assert_eq!(views, [true, true, false, false, false, true]);
+    assert_eq!(views, [true, true, false, false, true, true]);
 }
 
 #[test]
@@ -173,10 +173,15 @@ fn dimensions_chain_the_widths_and_the_heights() {
 }
 
 #[test]
-fn the_sample_kitchen_is_placed_without_problems() {
+fn the_sample_kitchen_shows_its_blind_panel() {
+    // The BC42 stops 3" short of the corner, and nothing stands on the
+    // East wall in front of its blind 24".
     let (project, _) = kitchen();
-    assert_eq!(placement_problems(&project), Vec::<String>::new());
+    assert_eq!(placement_problems(&project), [BLIND]);
 }
+
+/// The warning for the sample's BC42.
+const BLIND: &str = "BC42's blind panel shows: no cabinet stands in front of all of it";
 
 /// The kitchen with the placement of `label` on its wall moved to
 /// `offset` and `elevation` inches.
@@ -203,18 +208,19 @@ fn products_past_the_wall_over_openings_or_into_others_are_reported() {
     // The W30 over the window, 60" along at 54".
     assert_eq!(
         placement_problems(&moved("W30", 60, 54)),
-        ["W30 covers the window on wall North"]
+        ["W30 covers the window on wall North", BLIND]
     );
     // Hung at 72", its top is 102", above the 96" wall.
     assert_eq!(
         placement_problems(&moved("W30", 0, 72)),
-        ["W30 is taller than wall North"]
+        ["W30 is taller than wall North", BLIND]
     );
     // The first B30 at 126" runs past the wall's end and into the BC42.
     assert_eq!(
         placement_problems(&moved("B30", 126, 0)),
         [
             "B30 runs past the end of wall North",
+            BLIND,
             "B30 and BC42 overlap",
         ]
     );
@@ -231,11 +237,56 @@ fn products_collide_around_a_corner() {
     corner.wall = Some(room.walls[1].id);
     corner.offset = Some(Length::ZERO);
     room.placements.push(corner.clone());
-    assert_eq!(placement_problems(&project), ["BC42 and B30 overlap"]);
+    assert_eq!(
+        placement_problems(&project),
+        [BLIND, "BC42 and B30 overlap"]
+    );
 
-    // Moved 24" along East, it clears the BC42's depth.
+    // Moved 24" along East, it clears the BC42's depth; but the BC42 stops
+    // 3" short of the corner, so the B30 hides only 21" of its blind 24".
     let room = &mut project.rooms[0];
     let last: &mut Placement = room.placements.last_mut().unwrap();
     last.offset = Some(Length::from_inches(24));
-    assert_eq!(placement_problems(&project), Vec::<String>::new());
+    assert_eq!(placement_problems(&project), [BLIND]);
+}
+
+/// The sample kitchen with the BC42 moved into the corner, at 102" on the
+/// North wall, and a B30 on the East wall in front of it, 24" along.
+fn blind_corner_in_the_corner() -> Project {
+    let mut project = moved("BC42", 102, 0);
+    let room = &mut project.rooms[0];
+    let mut adjoining = room.placements[0].clone();
+    adjoining.id = Id::new();
+    adjoining.wall = Some(room.walls[1].id);
+    adjoining.offset = Some(Length::from_inches(24));
+    room.placements.push(adjoining);
+    project
+}
+
+#[test]
+fn a_cabinet_on_the_adjoining_wall_hides_the_blind_panel() {
+    // The B30's side runs from 120" to 144" along the North wall, the
+    // BC42's blind 24" exactly.
+    assert_eq!(
+        placement_problems(&blind_corner_in_the_corner()),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn a_cabinet_in_front_of_a_blind_corners_doors_is_reported() {
+    // With a blind 20", the doors reach to 124" and the B30 stands in
+    // front of their last 4".
+    let mut project = blind_corner_in_the_corner();
+    let bc42 = project
+        .products
+        .iter_mut()
+        .find(|p| p.label == "BC42")
+        .unwrap();
+    bc42.parameters
+        .insert("blindWidth".into(), Length::from_inches(20).nm().into());
+    assert_eq!(
+        placement_problems(&project),
+        ["B30 stands in front of BC42's doors"]
+    );
 }

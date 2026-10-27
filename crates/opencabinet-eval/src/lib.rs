@@ -83,6 +83,19 @@
 //! as its frame opening less the slide clearances, rather than the inside
 //! of the case.
 //!
+//! A **blind corner** (`blind-corner-base@1`, `blind-corner-wall@1`) is
+//! a base or wall box whose front is hidden on its `blindSide` by the
+//! cabinet on the adjoining wall, `blindWidth` `B` from that side. Nothing
+//! that opens reaches into `B`: frameless, the doors' zone is the rest of
+//! the face; with a face frame, a mullion `m` wide stands inside `B` so
+//! that a door overlaying it by `o` ends at `B` exactly (for an inset door,
+//! `o` is `−G`). The front tree divides the doors' zone, whose single doors
+//! hinge away from the blind side unless they say otherwise. The blind
+//! part's opening takes `blindPanel`, a fixed slab of the `blindPanel`
+//! material, or the doors', sized and banded like a door. Shelves span the
+//! whole inside; drawers are an error, with no side next to the blind
+//! part to mount their slides on.
+//!
 //! The cut size of a part is its finished size less the thickness of the
 //! bands on its ends (length) and sides (width).
 //!
@@ -133,8 +146,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use opencabinet_model::{
-    EdgeBand, FrontStyle, Hardware, Id, InsertKind, Length, Library, Method, Product, Project,
-    SheetMaterial, Side, SplitDirection,
+    EdgeBand, FrontStyle, Hardware, Id, Insert, InsertKind, Length, Library, Method, Product,
+    Project, SheetMaterial, Side, SplitDirection,
 };
 
 pub use crate::elevation::{Dimension, Elevation, PlacedCabinet, elevation, placement_problems};
@@ -278,12 +291,13 @@ pub fn evaluate_product(
     library: &Library,
     quantity: u32,
 ) -> Result<Evaluated, String> {
-    let kind = Kind::of(&product.product_type).ok_or_else(|| {
+    let (kind, _) = Kind::of(&product.product_type).ok_or_else(|| {
         format!(
             "product type `{}` cannot be evaluated yet",
             product.product_type
         )
     })?;
+    let blind = Blind::of(product)?;
     if !product.overrides.is_empty() {
         return Err("overrides cannot be applied yet".into());
     }
@@ -302,14 +316,10 @@ pub fn evaluate_product(
     };
     let case = lookup.material("case")?;
     let back = lookup.material("back")?;
-    let frame_material = match face_frame {
-        Some(_) => Some(lookup.material("faceFrame")?),
-        None => None,
-    };
     // A face frame covers the front edges of the case.
-    let case_band = match face_frame {
-        Some(_) => None,
-        None => lookup.band("edgeBandCase"),
+    let (frame_material, case_band) = match face_frame {
+        Some(_) => (Some(lookup.material("faceFrame")?), None),
+        None => (None, lookup.band("edgeBandCase")),
     };
 
     let (w, h, d) = (product.width, product.height, product.depth);
@@ -355,16 +365,21 @@ pub fn evaluate_product(
         width: w,
         height: box_height,
     };
-    let (layout, fit) = lay_out_front(product, face_frame, face, &rules.fronts)?;
+    let plan = lay_out_front(product, face_frame, face, &rules.fronts, blind)?;
+    let (layout, fit) = (plan.layout, plan.fit);
     if let (Some(frame), Some(material)) = (face_frame, frame_material) {
         fit.check_frame(frame, &layout.dividers)?;
         parts.extend(frame_parts(frame, material, face, &layout.dividers, &maker));
+    }
+    if let Some(blind) = plan.blind {
+        parts.extend(blind_parts(blind, frame_material, &lookup, &maker)?);
     }
     let mut cabinet = Cabinet {
         lookup: &lookup,
         maker: &maker,
         rules: &rules,
         fit,
+        blind: blind.map(|b| b.side),
         face,
         inner_width,
         depth: case_depth,
@@ -385,6 +400,52 @@ pub fn evaluate_product(
         hardware,
         notes: lookup.notes.into_inner(),
     })
+}
+
+/// A blind corner's fixed panel, made like a slab door, and with a face
+/// frame the mullion beside it.
+fn blind_parts(
+    (panel, mullion): (Rect, Option<Rect>),
+    frame_material: Option<&SheetMaterial>,
+    lookup: &Lookup<'_>,
+    maker: &PartMaker<'_>,
+) -> Result<Vec<Part>, String> {
+    let mut parts = Vec::new();
+    if let (Some(mullion), Some(material)) = (mullion, frame_material) {
+        parts.push(maker.part(
+            "frame/mullion.blind",
+            "frameMullion",
+            material,
+            mullion.height,
+            mullion.width,
+            BARE,
+        ));
+    }
+    let material = lookup.material_or("blindPanel", "doors")?;
+    let bands = banded(lookup.band("edgeBandFronts"), &[0, 1, 2, 3]);
+    parts.push(maker.part(
+        "front/blindPanel",
+        "blindPanel",
+        material,
+        panel.height,
+        panel.width,
+        bands,
+    ));
+    Ok(parts)
+}
+
+/// The side door `index` of `count` in `insert` hinges on: a pair on its
+/// outer edges, a single door on its `hingeSide`, or in a blind corner
+/// away from the blind part.
+fn door_hinge(insert: &Insert, count: u32, index: usize, blind: Option<Side>) -> Option<Side> {
+    match (count, index) {
+        (2, 0) => Some(Side::Left),
+        (2, _) => Some(Side::Right),
+        _ => insert.hinge_side.or(blind.map(|side| match side {
+            Side::Left => Side::Right,
+            Side::Right => Side::Left,
+        })),
+    }
 }
 
 /// Adds what the inserts machine into the left and right sides.
@@ -450,15 +511,27 @@ fn face_frame(method: Method, rules: &Rules) -> Result<Option<&FaceFrame>, Strin
     }
 }
 
+/// A product's front laid out.
+struct FrontPlan<'p> {
+    /// The openings of its front tree, and the frame members between them.
+    layout: Layout<'p>,
+    /// How its fronts fit.
+    fit: Fit,
+    /// A blind corner's blind panel, and with a face frame the mullion
+    /// beside it.
+    blind: Option<(Rect, Option<Rect>)>,
+}
+
 /// The product's front laid over `face`, inside the face frame if there is
-/// one, and how its fronts fit.
+/// one; a blind corner's front tree takes only the doors' zone.
 fn lay_out_front<'p>(
     product: &'p Product,
     face_frame: Option<&FaceFrame>,
     face: Rect,
     fronts: &Fronts,
-) -> Result<(Layout<'p>, Fit), String> {
-    let (opening, dividers, fit) = match face_frame {
+    blind: Option<Blind>,
+) -> Result<FrontPlan<'p>, String> {
+    let (mut opening, dividers, fit) = match face_frame {
         None => (
             face,
             Dividers::default(),
@@ -466,11 +539,19 @@ fn lay_out_front<'p>(
         ),
         Some(frame) => (frame.opening(face)?, frame.dividers(), Fit::framed(fronts)?),
     };
+    let blind = match blind {
+        Some(blind) => {
+            let (doors, panel, mullion) = blind.divide(face, opening, fit, dividers.mullion)?;
+            opening = doors;
+            Some((fit.fronts(panel, 1)?[0], mullion))
+        }
+        None => None,
+    };
     let layout = match &product.front {
         Some(root) => lay_out(root, opening, dividers)?,
         None => Layout::default(),
     };
-    Ok((layout, fit))
+    Ok(FrontPlan { layout, fit, blind })
 }
 
 /// The members of a face frame the size of `face`: stiles the full height,
@@ -773,13 +854,105 @@ enum Kind {
 }
 
 impl Kind {
-    fn of(product_type: &str) -> Option<Self> {
+    /// The kind of box a product type builds, and whether it is a blind
+    /// corner.
+    fn of(product_type: &str) -> Option<(Self, bool)> {
         match product_type {
-            "base-cabinet@1" => Some(Self::Base),
-            "wall-cabinet@1" => Some(Self::Wall),
-            "tall-cabinet@1" => Some(Self::Tall),
+            "base-cabinet@1" => Some((Self::Base, false)),
+            "wall-cabinet@1" => Some((Self::Wall, false)),
+            "tall-cabinet@1" => Some((Self::Tall, false)),
+            "blind-corner-base@1" => Some((Self::Base, true)),
+            "blind-corner-wall@1" => Some((Self::Wall, true)),
             _ => None,
         }
+    }
+}
+
+/// The part of a blind corner cabinet's front that the cabinet on the
+/// adjoining wall hides, from its parameters.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Blind {
+    /// The side it is on, seen from the front.
+    pub side: Side,
+    /// How much of the front it takes, from that side.
+    pub width: Length,
+}
+
+impl Blind {
+    /// The blind part of `product`, if its type is a blind corner.
+    pub fn of(product: &Product) -> Result<Option<Self>, String> {
+        if !Kind::of(&product.product_type).is_some_and(|(_, blind)| blind) {
+            return Ok(None);
+        }
+        let side = product
+            .parameters
+            .get("blindSide")
+            .and_then(|v| serde_json::from_value::<Side>(v.clone()).ok())
+            .ok_or("a blind corner cabinet needs a `blindSide`, left or right")?;
+        let width = product
+            .parameters
+            .get("blindWidth")
+            .and_then(serde_json::Value::as_i64)
+            .map(Length::from_nm)
+            .filter(|&w| w > Length::ZERO)
+            .ok_or("a blind corner cabinet needs a `blindWidth` greater than zero")?;
+        Ok(Some(Self { side, width }))
+    }
+
+    /// Divides the box face between the doors and the blind panel. The
+    /// doors' zone is what remains of `opening` (the face, or the face
+    /// frame's opening); the blind panel's opening is the rest, and a
+    /// face frame puts a `mullion` wide mullion between them. Its edge on
+    /// the doors' side is placed so that nothing that opens reaches into
+    /// the blind width: a door's edge lands on it exactly, or a gap past
+    /// it when frameless.
+    fn divide(
+        self,
+        face: Rect,
+        opening: Rect,
+        fit: Fit,
+        mullion: Length,
+    ) -> Result<(Rect, Rect, Option<Rect>), String> {
+        // Distances from the blind edge of the face.
+        let (reach, mullion) = match fit {
+            Fit::Frameless { .. } => (Length::ZERO, Length::ZERO),
+            Fit::Framed { by, gap } => {
+                if by > Length::ZERO && mullion - by * 2 < gap {
+                    return Err(
+                        "the blind corner's mullion is too narrow for the fronts on each \
+                         side of it to clear each other by the gap"
+                            .into(),
+                    );
+                }
+                (by, mullion)
+            }
+        };
+        let doors_edge = self.width + reach;
+        let blind_edge = doors_edge - mullion;
+        let (near, far) = match self.side {
+            Side::Left => (opening.x - face.x, opening.x + opening.width - face.x),
+            Side::Right => (
+                face.x + face.width - opening.x - opening.width,
+                face.x + face.width - opening.x,
+            ),
+        };
+        if blind_edge <= near {
+            return Err("the blind width is too narrow for the face frame".into());
+        }
+        if doors_edge >= far {
+            return Err("the blind width leaves no room for the doors".into());
+        }
+        // The part of `opening` from `from` to `to` away from the blind edge.
+        let zone = |from: Length, to: Length| Rect {
+            x: match self.side {
+                Side::Left => face.x + from,
+                Side::Right => face.x + face.width - to,
+            },
+            width: to - from,
+            ..opening
+        };
+        let mullion = (mullion > Length::ZERO).then(|| zone(blind_edge, doors_edge));
+        Ok((zone(doors_edge, far), zone(near, blind_edge), mullion))
     }
 }
 
@@ -789,6 +962,8 @@ struct Cabinet<'c, 'p> {
     maker: &'c PartMaker<'p>,
     rules: &'c Rules,
     fit: Fit,
+    /// A blind corner's blind side.
+    blind: Option<Side>,
     /// The front of the box, from the floor: where the sides stand.
     face: Rect,
     /// Between the sides.
@@ -829,14 +1004,8 @@ impl<'p> Cabinet<'_, 'p> {
                 let doors = self.fit.fronts(opening.rect, count)?;
                 for (i, door) in doors.into_iter().enumerate() {
                     let key = format!("{prefix}/door.{}", i + 1);
-                    // A pair hinges on its outer edges.
-                    let side = match (count, i) {
-                        (2, 0) => Side::Left,
-                        (2, _) => Side::Right,
-                        _ => insert
-                            .hinge_side
-                            .ok_or("a single door needs a hinge side")?,
-                    };
+                    let side = door_hinge(insert, count, i, self.blind)
+                        .ok_or("a single door needs a hinge side")?;
                     let first = parts.len();
                     if five_piece {
                         self.five_piece(&key, door, parts)?;
@@ -862,6 +1031,13 @@ impl<'p> Cabinet<'_, 'p> {
                     self.hinges(opening, door, side, &mut parts[target])?;
                 }
                 self.shelves(&prefix, insert.shelves, opening.rect, parts)?;
+            }
+            InsertKind::Drawer if self.blind.is_some() => {
+                return Err(
+                    "drawers in a blind corner cabinet cannot be built yet: there is no \
+                     side to mount their slides on next to the blind part"
+                        .into(),
+                );
             }
             InsertKind::Drawer | InsertKind::FalseFront => {
                 let material = self.lookup.material_or("drawerFronts", "doors")?;

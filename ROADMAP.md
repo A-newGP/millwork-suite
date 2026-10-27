@@ -27,5 +27,9 @@ for shelf pins and hinge plates, and hinge cups. Still to come: case joinery
 (dowels, confirmat screws), slide and pull holes, angled pocket holes for
 face frames, and five-piece profiles, which are cut with shaper tooling.
 
+Blind corner cabinets in 0.1 take doors and shelves. Drawers in them need
+a partition or blocking next to the blind part for their slides, and come
+later.
+
 AI features are cross-cutting and optional: they arrive where they add value
 and never become a requirement.

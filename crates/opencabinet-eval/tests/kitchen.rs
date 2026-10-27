@@ -261,7 +261,7 @@ fn what_cannot_be_evaluated_yet_is_reported_not_guessed() {
         [
             "note: B30: no edge band chosen for `edgeBandCase`; those edges are left bare",
             "error: SB36: product type `sink-base@1` cannot be evaluated yet",
-            "error: BC42: product type `blind-corner-base@1` cannot be evaluated yet",
+            "error: BC42: no material chosen for `back`",
             "error: IS48: no material chosen for `back`",
             "error: F3: product type `filler@1` cannot be evaluated yet",
             "error: V24: product type `vanity-base@1` cannot be evaluated yet",
