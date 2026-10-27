@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 
 use opencabinet_model::{FrontStyle, Length, Library, Project, Units};
-use opencabinet_reports::{CutList, Fonts, Paper, cut_list, cut_list_pdf};
+use opencabinet_reports::{Bom, CutList, Fonts, Paper, cut_list, cut_list_pdf};
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -40,6 +40,7 @@ fn the_pdf_is_written_and_identical_every_time() {
     let list = kitchen_list();
     let pdf = cut_list_pdf(
         &list,
+        &Bom::default(),
         "Sample kitchen",
         "OpenCabinet test",
         Paper::Letter,
@@ -49,6 +50,7 @@ fn the_pdf_is_written_and_identical_every_time() {
     assert!(pdf.starts_with(b"%PDF-"));
     let again = cut_list_pdf(
         &list,
+        &Bom::default(),
         "Sample kitchen",
         "OpenCabinet test",
         Paper::Letter,
@@ -66,8 +68,16 @@ fn a_long_list_continues_on_more_pages() {
     for _ in 0..10 {
         list.rows.extend(rows.iter().cloned());
     }
-    let short = cut_list_pdf(&kitchen_list(), "Kitchen", "test", Paper::A4, &fonts).unwrap();
-    let long = cut_list_pdf(&list, "Kitchen", "test", Paper::A4, &fonts).unwrap();
+    let short = cut_list_pdf(
+        &kitchen_list(),
+        &Bom::default(),
+        "Kitchen",
+        "test",
+        Paper::A4,
+        &fonts,
+    )
+    .unwrap();
+    let long = cut_list_pdf(&list, &Bom::default(), "Kitchen", "test", Paper::A4, &fonts).unwrap();
     assert!(long.len() > short.len());
 }
 

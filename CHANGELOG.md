@@ -11,6 +11,16 @@ follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Bill of materials:** what to buy for the job, on a Materials tab next
+  to the cut list, on the last page of the cut list PDF, and as CSV.
+  Sheets are estimated from the parts' area plus the standard's waste;
+  solid wood is counted by length, in boards; edge band by the length of
+  every banded edge plus an allowance for trimming; and the hinges, drawer
+  slides and shelf pins the cabinets use. Standards gain the
+  `billOfMaterials` rules for the waste and the allowance.
+
 ## [0.1.0-beta.1] - 2026-10-26
 
 The first test release of OpenCabinet Designer, for shops willing to try

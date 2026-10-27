@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: 2026 OpenCabinet contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! The cut list as CSV, for spreadsheets and other programs.
+//! The cut list and the bill of materials as CSV, for spreadsheets and
+//! other programs.
 
 use std::fmt::Write;
 
+use crate::bill_of_materials::{Bom, BomRow};
 use crate::cut_list::{CutList, CutRow};
 
 /// What separates the fields of a row.
@@ -35,6 +37,30 @@ impl Separator {
 /// RFC 4180 describes. Inch marks make quoting common.
 #[must_use]
 pub fn to_csv(list: &CutList, separator: Separator) -> String {
+    table(
+        &CutRow::TITLES,
+        list.rows.iter().map(CutRow::cells),
+        separator,
+    )
+}
+
+/// The bill of materials as CSV text, written as [`to_csv`] writes the cut
+/// list.
+#[must_use]
+pub fn materials_to_csv(bom: &Bom, separator: Separator) -> String {
+    table(
+        &BomRow::TITLES,
+        bom.rows.iter().map(BomRow::cells),
+        separator,
+    )
+}
+
+/// A header row and rows of cells as CSV text.
+fn table<'r, const N: usize>(
+    titles: &[&str; N],
+    rows: impl Iterator<Item = [&'r str; N]>,
+    separator: Separator,
+) -> String {
     let separator = separator.char();
     let mut csv = String::from('\u{feff}');
     let mut line = |cells: &[&str]| {
@@ -48,9 +74,9 @@ pub fn to_csv(list: &CutList, separator: Separator) -> String {
         }
         write!(csv, "{row}\r\n").expect("writing to a String");
     };
-    line(&CutRow::TITLES);
-    for row in &list.rows {
-        line(&row.cells());
+    line(titles);
+    for row in rows {
+        line(&row);
     }
     csv
 }

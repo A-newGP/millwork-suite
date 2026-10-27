@@ -26,6 +26,7 @@ use opencabinet_model::{Length, Library, Project, Units};
 use skrifa::instance::{LocationRef, Size};
 use skrifa::{FontRef, MetadataProvider};
 
+use crate::bill_of_materials::{Bom, BomRow};
 use crate::cut_list::{CutList, CutRow};
 use crate::elevations::{
     CABINETS, DIMENSIONS, FRONTS, HINGE_MARKS, OPENINGS, WALL, bounds, elevation_shapes,
@@ -118,15 +119,19 @@ const ROW: f32 = 6.0;
 /// Each column's share of the table's width, in the order of
 /// [`CutRow::TITLES`].
 const COLUMNS: [f32; 10] = [0.07, 0.15, 0.17, 0.04, 0.09, 0.09, 0.07, 0.10, 0.10, 0.12];
+/// The same for the bill of materials, in the order of [`BomRow::TITLES`].
+const MATERIAL_COLUMNS: [f32; 4] = [0.10, 0.30, 0.12, 0.48];
 
-/// The cut list as PDF bytes. `title` heads every page and `generator`,
-/// such as "OpenCabinet Designer 0.1.0", is written in its footer and
-/// metadata. The same input always gives the same bytes.
+/// The cut list as PDF bytes, with the bill of materials on a last page.
+/// `title` heads every page and `generator`, such as "OpenCabinet Designer
+/// 0.1.0", is written in its footer and metadata. The same input always
+/// gives the same bytes.
 ///
 /// # Errors
 /// When the PDF cannot be written.
 pub fn cut_list_pdf(
     list: &CutList,
+    materials: &Bom,
     title: &str,
     generator: &str,
     paper: Paper,
@@ -149,7 +154,7 @@ pub fn cut_list_pdf(
             .title(format!("Cut list — {title}"))
             .creator(generator.to_owned()),
     );
-    let pages = chunks.len();
+    let pages = chunks.len() + 1;
     for (index, rows) in chunks.into_iter().enumerate() {
         let settings = PageSettings::from_wh(width * PT_PER_MM, height * PT_PER_MM)
             .ok_or("the paper size is not positive")?;
@@ -180,11 +185,11 @@ pub fn cut_list_pdf(
 
         let table_width = width - 2.0 * MARGIN;
         let header = CutRow::TITLES;
-        pen.row(&fonts.bold, table_top, table_width, &header);
+        pen.row(&fonts.bold, table_top, table_width, &header, &COLUMNS);
         pen.rule(table_top + ROW, table_width, 0.4);
         for (i, row) in rows.iter().enumerate() {
             let y = table_top + ROW * (i as f32 + 1.0);
-            pen.row(&fonts.regular, y, table_width, &row.cells());
+            pen.row(&fonts.regular, y, table_width, &row.cells(), &COLUMNS);
             pen.rule(y + ROW, table_width, 0.15);
         }
         pen.text(
@@ -197,9 +202,87 @@ pub fn cut_list_pdf(
         surface.finish();
         page.finish();
     }
+    materials_page(
+        &mut document,
+        materials,
+        title,
+        generator,
+        paper,
+        fonts,
+        pages,
+    )?;
     document
         .finish()
         .map_err(|e| format!("Cannot write the PDF: {e:?}"))
+}
+
+/// The bill of materials as the last page of the cut list: its notes,
+/// then a table.
+fn materials_page(
+    document: &mut Document,
+    materials: &Bom,
+    title: &str,
+    generator: &str,
+    paper: Paper,
+    fonts: &Fonts,
+    pages: usize,
+) -> Result<(), String> {
+    let (width, height) = paper.landscape();
+    let settings = PageSettings::from_wh(width * PT_PER_MM, height * PT_PER_MM)
+        .ok_or("the paper size is not positive")?;
+    let mut page = document.start_page_with(settings);
+    let mut surface = page.surface();
+    let mut pen = Pen {
+        surface: &mut surface,
+    };
+    pen.text(
+        &fonts.bold,
+        (MARGIN, MARGIN + 5.0),
+        TITLE_SIZE,
+        &format!("Materials — {title}"),
+    );
+    let page_label = format!("Page {pages} of {pages}");
+    let label_width = fonts.regular.width(&page_label, TEXT_SIZE) / PT_PER_MM;
+    pen.text(
+        &fonts.regular,
+        (width - MARGIN - label_width, MARGIN + 5.0),
+        TEXT_SIZE,
+        &page_label,
+    );
+    for (i, note) in materials.notes.iter().enumerate() {
+        let y = MARGIN + 11.0 + i as f32 * 4.5;
+        pen.text(&fonts.regular, (MARGIN, y), TEXT_SIZE, note);
+    }
+    let table_top = MARGIN + 12.0 + materials.notes.len() as f32 * 4.5;
+    let table_width = width - 2.0 * MARGIN;
+    pen.row(
+        &fonts.bold,
+        table_top,
+        table_width,
+        &BomRow::TITLES,
+        &MATERIAL_COLUMNS,
+    );
+    pen.rule(table_top + ROW, table_width, 0.4);
+    for (i, row) in materials.rows.iter().enumerate() {
+        let y = table_top + ROW * (i as f32 + 1.0);
+        pen.row(
+            &fonts.regular,
+            y,
+            table_width,
+            &row.cells(),
+            &MATERIAL_COLUMNS,
+        );
+        pen.rule(y + ROW, table_width, 0.15);
+    }
+    pen.text(
+        &fonts.regular,
+        (MARGIN, height - MARGIN + 4.0),
+        TEXT_SIZE - 1.5,
+        generator,
+    );
+    surface.finish();
+    page.finish();
+    Ok(())
 }
 
 /// The scales an elevation may be drawn at, largest first: the
@@ -363,11 +446,12 @@ impl Pen<'_, '_> {
         );
     }
 
-    /// One table row whose top is at `top`; each cell is cut to its column,
-    /// with an ellipsis, measured with the font.
-    fn row(&mut self, face: &Face, top: f32, width: f32, cells: &[&str]) {
+    /// One table row whose top is at `top`, in columns with these shares
+    /// of `width`; each cell is cut to its column, with an ellipsis,
+    /// measured with the font.
+    fn row(&mut self, face: &Face, top: f32, width: f32, cells: &[&str], columns: &[f32]) {
         let mut x = MARGIN;
-        for (cell, share) in cells.iter().zip(COLUMNS) {
+        for (cell, &share) in cells.iter().zip(columns) {
             let column = share * width;
             let room = (column - 2.0) * PT_PER_MM;
             let text = fit(face, cell, TEXT_SIZE, room);

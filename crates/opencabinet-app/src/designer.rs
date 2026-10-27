@@ -17,7 +17,8 @@ use opencabinet_model::{
 };
 use opencabinet_reports::elevations::elevations_dxf;
 use opencabinet_reports::{
-    CutList, Fonts, Paper, Separator, cut_list, cut_list_pdf, elevations_pdf, parts_dxf, to_csv,
+    Bom, CutList, Fonts, Paper, Separator, bill_of_materials, cut_list, cut_list_pdf,
+    elevations_pdf, materials_to_csv, parts_dxf, to_csv,
 };
 
 use crate::NAME_AND_VERSION;
@@ -519,6 +520,28 @@ impl Designer {
         )
     }
 
+    /// What to buy for the project, in the current units.
+    #[must_use]
+    pub fn bill_of_materials(&self) -> Bom {
+        let document = &self.document;
+        bill_of_materials(
+            &document.project,
+            &document.library,
+            self.units(),
+            self.precision(),
+        )
+    }
+
+    /// Writes the bill of materials as CSV, with `separator` between
+    /// fields.
+    ///
+    /// # Errors
+    /// A message for the user when the file cannot be written.
+    pub fn export_materials(&self, path: &Path, separator: Separator) -> Result<(), String> {
+        std::fs::write(path, materials_to_csv(&self.bill_of_materials(), separator))
+            .map_err(|e| format!("Cannot export the materials: {e}"))
+    }
+
     /// Writes the cut list as CSV, with `separator` between fields.
     ///
     /// # Errors
@@ -536,7 +559,14 @@ impl Designer {
     pub fn export_cut_list_pdf(&self, path: &Path, fonts: &Fonts) -> Result<(), String> {
         let title = &self.document.project.name;
         let paper = Paper::for_units(self.units());
-        let pdf = cut_list_pdf(&self.cut_list(), title, NAME_AND_VERSION, paper, fonts)?;
+        let pdf = cut_list_pdf(
+            &self.cut_list(),
+            &self.bill_of_materials(),
+            title,
+            NAME_AND_VERSION,
+            paper,
+            fonts,
+        )?;
         std::fs::write(path, pdf).map_err(|e| format!("Cannot export the cut list: {e}"))
     }
 
@@ -732,8 +762,6 @@ fn starter_library() -> Library {
         grain: Grain::Length,
         unknown: BTreeMap::default(),
     };
-    // The drawer slides the shop stocks, 12" to 22" by 2".
-    let slides = [12, 14, 16, 18, 20, 22].map(Length::from_inches);
     let hinge = Hardware {
         id: Id::new(),
         version: 1,
@@ -746,7 +774,41 @@ fn starter_library() -> Library {
         .into(),
         unknown: BTreeMap::default(),
     };
-    let rules = serde_json::json!({
+    let rules = starter_rules(hinge.id);
+    Library {
+        materials: vec![
+            sheet("Plywood 3/4\"", inches(3, 4), Length::from_mm(18)),
+            sheet("Plywood 1/4\"", inches(1, 4), Length::from_mm(6)),
+            sheet("Plywood 1/2\"", inches(1, 2), Length::from_mm(12)),
+        ],
+        edge_bands: vec![EdgeBand {
+            id: Id::new(),
+            version: 1,
+            name: "Edge band 0.5 mm".into(),
+            thickness: Length::from_nm(500_000),
+            width: Length::from_mm(22),
+            unknown: BTreeMap::default(),
+        }],
+        standards: vec![Standard {
+            id: Id::new(),
+            version: 1,
+            name: "Frameless".into(),
+            derived_from: None,
+            method: Method::Frameless,
+            rules: serde_json::from_value(rules).expect("rules are a JSON object"),
+            unknown: BTreeMap::default(),
+        }],
+        hardware: vec![hinge],
+        unknown: BTreeMap::default(),
+    }
+}
+
+/// The rules of the starter library's frameless standard, with `hinge`
+/// for its doors.
+fn starter_rules(hinge: Id) -> serde_json::Value {
+    // The drawer slides the shop stocks, 12" to 22" by 2".
+    let slides = [12, 14, 16, 18, 20, 22].map(Length::from_inches);
+    serde_json::json!({
         "back": {
             "construction": "grooved",
             "grooveDepth": inches(3, 8),
@@ -775,6 +837,10 @@ fn starter_library() -> Library {
             "backAllowance": inches(3, 4),
         },
         "toeKick": { "height": Length::from_inches(4) },
+        "billOfMaterials": {
+            "wastePercent": 15,
+            "edgeBandAllowance": Length::from_inches(1),
+        },
         "systemHoles": {
             "frontSetback": Length::from_mm(37),
             "rearSetback": Length::from_mm(37),
@@ -784,7 +850,7 @@ fn starter_library() -> Library {
             "endClearance": Length::from_inches(2),
         },
         "hinges": {
-            "hardware": hinge.id,
+            "hardware": hinge,
             "boringDistance": Length::from_mm(4),
             "endDistance": Length::from_inches(3),
             "counts": [
@@ -793,33 +859,7 @@ fn starter_library() -> Library {
                 { "upTo": Length::from_inches(80), "count": 4 },
             ],
         },
-    });
-    Library {
-        materials: vec![
-            sheet("Plywood 3/4\"", inches(3, 4), Length::from_mm(18)),
-            sheet("Plywood 1/4\"", inches(1, 4), Length::from_mm(6)),
-            sheet("Plywood 1/2\"", inches(1, 2), Length::from_mm(12)),
-        ],
-        edge_bands: vec![EdgeBand {
-            id: Id::new(),
-            version: 1,
-            name: "Edge band 0.5 mm".into(),
-            thickness: Length::from_nm(500_000),
-            width: Length::from_mm(22),
-            unknown: BTreeMap::default(),
-        }],
-        standards: vec![Standard {
-            id: Id::new(),
-            version: 1,
-            name: "Frameless".into(),
-            derived_from: None,
-            method: Method::Frameless,
-            rules: serde_json::from_value(rules).expect("rules are a JSON object"),
-            unknown: BTreeMap::default(),
-        }],
-        hardware: vec![hinge],
-        unknown: BTreeMap::default(),
-    }
+    })
 }
 
 /// A 30" × 34-1/2" × 24" base cabinet from the starter library.

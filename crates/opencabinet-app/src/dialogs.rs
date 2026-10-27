@@ -38,6 +38,8 @@ pub enum FileKind {
     CutListPdf,
     /// The walls' elevations to print, `.pdf`.
     ElevationsPdf,
+    /// The bill of materials for spreadsheets, `.csv`.
+    Materials,
 }
 
 impl FileKind {
@@ -45,6 +47,7 @@ impl FileKind {
         match self {
             Self::Project => ("OpenCabinet project", "ocab"),
             Self::CutList => ("Cut list for spreadsheets", "csv"),
+            Self::Materials => ("Materials for spreadsheets", "csv"),
             Self::CutListPdf | Self::ElevationsPdf => ("PDF document", "pdf"),
         }
     }
@@ -69,6 +72,7 @@ impl Dialogs for SystemDialogs {
             FileKind::Project => "Save project",
             FileKind::CutList | FileKind::CutListPdf => "Export cut list",
             FileKind::ElevationsPdf => "Export elevations",
+            FileKind::Materials => "Export materials",
         };
         let path = FileDialog::new()
             .set_title(title)

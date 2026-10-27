@@ -7,7 +7,9 @@
   "config": {
     "default": true,
     // Prose wraps at ~78 columns by convention, but tables and URLs cannot.
-    "MD013": false
+    "MD013": false,
+    // A changelog repeats "Added", "Fixed"... under each version.
+    "MD024": { "siblings_only": true }
   },
   "globs": ["**/*.md"],
   "ignores": [

@@ -34,7 +34,7 @@ impl Dialogs for Answers {
     fn save_path(&self, _suggested_name: &str, kind: FileKind) -> Option<PathBuf> {
         let extension = match kind {
             FileKind::Project => "ocab",
-            FileKind::CutList => "csv",
+            FileKind::CutList | FileKind::Materials => "csv",
             FileKind::CutListPdf | FileKind::ElevationsPdf => "pdf",
         };
         self.path
@@ -137,35 +137,7 @@ fn the_window_edits_saves_and_reopens_a_project() {
     assert_eq!(window.get_depth_reading(), "≈ 23-5/8\"");
     assert_eq!(window.get_status(), "Opened test-cabinet.ocab");
 
-    // The cut list exports for Excel in Spanish: UTF-8 with a byte order
-    // mark, semicolons between fields.
-    window.invoke_export_cut_list(true);
-    let csv = std::fs::read_to_string(path.with_extension("csv")).unwrap();
-    assert!(csv.starts_with("\u{feff}Product;Part;Material;"), "{csv}");
-    assert_eq!(csv.lines().count(), 15);
-    assert_eq!(
-        window.get_status(),
-        "Exported the cut list to test-cabinet.csv"
-    );
-
-    // And as a PDF, with the bundled font.
-    window.invoke_export_cut_list_pdf();
-    let pdf = std::fs::read(path.with_extension("pdf")).unwrap();
-    assert!(pdf.starts_with(b"%PDF-"));
-    assert_eq!(
-        window.get_status(),
-        "Exported the cut list to test-cabinet.pdf"
-    );
-
-    // And every part as DXF, into a folder.
-    window.invoke_export_parts_dxf();
-    let folder = path.with_extension("dxf");
-    assert!(folder.join("B1 - Left side.dxf").is_file());
-    assert!(folder.join("all-parts.dxf").is_file());
-    assert_eq!(
-        window.get_status(),
-        "Exported 14 parts as DXF to test-cabinet.dxf"
-    );
+    exports(&window, &path);
 
     // Five-piece fronts replace the slab ones in the cut list.
     window.invoke_style_chosen(true);
@@ -298,5 +270,50 @@ fn walls_and_placements(window: &AppWindow) {
     assert_eq!(
         window.get_status(),
         "Exported the elevations of 1 wall as DXF to test-cabinet.dxf"
+    );
+}
+
+/// The exports of the project saved at `path`, each written next to it.
+fn exports(window: &AppWindow, path: &std::path::Path) {
+    // The cut list exports for Excel in Spanish: UTF-8 with a byte order
+    // mark, semicolons between fields.
+    window.invoke_export_cut_list(true);
+    let csv = std::fs::read_to_string(path.with_extension("csv")).unwrap();
+    assert!(csv.starts_with("\u{feff}Product;Part;Material;"), "{csv}");
+    assert_eq!(csv.lines().count(), 15);
+    assert_eq!(
+        window.get_status(),
+        "Exported the cut list to test-cabinet.csv"
+    );
+
+    // The materials export the same way.
+    window.invoke_export_materials(false);
+    let materials = std::fs::read_to_string(path.with_extension("csv")).unwrap();
+    assert!(
+        materials.starts_with("\u{feff}Section,Item,Quantity,Detail\r\n"),
+        "{materials}"
+    );
+    assert_eq!(
+        window.get_status(),
+        "Exported the materials to test-cabinet.csv"
+    );
+
+    // And as a PDF, with the bundled font.
+    window.invoke_export_cut_list_pdf();
+    let pdf = std::fs::read(path.with_extension("pdf")).unwrap();
+    assert!(pdf.starts_with(b"%PDF-"));
+    assert_eq!(
+        window.get_status(),
+        "Exported the cut list to test-cabinet.pdf"
+    );
+
+    // And every part as DXF, into a folder.
+    window.invoke_export_parts_dxf();
+    let folder = path.with_extension("dxf");
+    assert!(folder.join("B1 - Left side.dxf").is_file());
+    assert!(folder.join("all-parts.dxf").is_file());
+    assert_eq!(
+        window.get_status(),
+        "Exported 14 parts as DXF to test-cabinet.dxf"
     );
 }

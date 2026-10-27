@@ -191,12 +191,36 @@ pub struct Problem {
     pub blocking: bool,
 }
 
+/// Hardware the evaluator places, and how many the job needs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HardwareUse {
+    /// The product it goes in.
+    pub product: Id,
+    /// What it is.
+    pub kind: HardwareKind,
+    /// How many, for every copy of the product the job needs.
+    pub quantity: u32,
+}
+
+/// A kind of hardware the evaluator places.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HardwareKind {
+    /// A hinge from the library, with its mounting plate.
+    Hinge(Id),
+    /// A pair of drawer slides this long.
+    SlidePair(Length),
+    /// A pin an adjustable shelf rests on.
+    ShelfPin,
+}
+
 /// The result of evaluating a project.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Evaluation {
     /// Every part of every product that could be evaluated, in product
     /// order.
     pub parts: Vec<Part>,
+    /// The hardware placed in them, in product order.
+    pub hardware: Vec<HardwareUse>,
     /// Products that could not be evaluated, and things worth knowing.
     pub problems: Vec<Problem>,
 }
@@ -223,6 +247,7 @@ pub fn evaluate(project: &Project, library: &Library) -> Evaluation {
         match evaluate_product(product, library, quantity) {
             Ok(evaluated) => {
                 evaluation.parts.extend(evaluated.parts);
+                evaluation.hardware.extend(evaluated.hardware);
                 let notes = evaluated.notes.into_iter().map(|n| problem(n, false));
                 evaluation.problems.extend(notes);
             }
@@ -237,6 +262,8 @@ pub fn evaluate(project: &Project, library: &Library) -> Evaluation {
 pub struct Evaluated {
     /// The product's parts.
     pub parts: Vec<Part>,
+    /// The hardware placed in it, counted for every copy.
+    pub hardware: Vec<HardwareUse>,
     /// Things the user should know that did not stop the evaluation, such
     /// as edges left bare.
     pub notes: Vec<String>,
@@ -346,20 +373,44 @@ pub fn evaluate_product(
         inside: (t + bottom_raise, box_height - t),
         back_front,
         sides: [Vec::new(), Vec::new()],
+        hardware: Vec::new(),
     };
     for opening in &layout.openings {
         cabinet.insert(opening, &mut parts)?;
     }
-    let [left, right] = cabinet.sides;
+    let hardware = tally(product.id, cabinet.hardware, quantity);
+    machine_sides(&mut parts, cabinet.sides);
+    Ok(Evaluated {
+        parts,
+        hardware,
+        notes: lookup.notes.into_inner(),
+    })
+}
+
+/// Adds what the inserts machine into the left and right sides.
+fn machine_sides(parts: &mut [Part], [left, right]: [Vec<Operation>; 2]) {
     for (key, operations) in [("case/side.left", left), ("case/side.right", right)] {
         if let Some(side) = parts.iter_mut().find(|p| p.key == key) {
             side.operations.extend(operations);
         }
     }
-    Ok(Evaluated {
-        parts,
-        notes: lookup.notes.into_inner(),
-    })
+}
+
+/// The hardware an evaluation placed, each kind once, counted for every
+/// copy of the product.
+fn tally(product: Id, placed: Vec<(HardwareKind, u32)>, quantity: u32) -> Vec<HardwareUse> {
+    let mut hardware: Vec<HardwareUse> = Vec::new();
+    for (kind, count) in placed {
+        match hardware.iter_mut().find(|h| h.kind == kind) {
+            Some(used) => used.quantity += count * quantity,
+            None => hardware.push(HardwareUse {
+                product,
+                kind,
+                quantity: count * quantity,
+            }),
+        }
+    }
+    hardware
 }
 
 /// How far the back reaches into the case from its rear edge, when the
@@ -750,6 +801,8 @@ struct Cabinet<'c, 'p> {
     back_front: Option<Length>,
     /// What the inserts machine into the left and right sides.
     sides: [Vec<Operation>; 2],
+    /// The hardware the inserts place, for one copy.
+    hardware: Vec<(HardwareKind, u32)>,
 }
 
 impl<'p> Cabinet<'_, 'p> {
@@ -889,6 +942,8 @@ impl<'p> Cabinet<'_, 'p> {
             Side::Right => part.width - from_edge,
         };
         let positions = hinge_positions(door.height, rules.end_distance, count);
+        self.hardware
+            .push((HardwareKind::Hinge(rules.hardware), count));
         for &x in &positions {
             part.operations.push(Operation::Hole {
                 face: Face::A,
@@ -1043,7 +1098,12 @@ impl<'p> Cabinet<'_, 'p> {
 
     /// The box of a drawer for `opening`: sides the full depth, front and
     /// back between them, and the bottom in a groove in all four.
-    fn drawer_box(&self, prefix: &str, opening: Rect, parts: &mut Vec<Part>) -> Result<(), String> {
+    fn drawer_box(
+        &mut self,
+        prefix: &str,
+        opening: Rect,
+        parts: &mut Vec<Part>,
+    ) -> Result<(), String> {
         let rules = self
             .rules
             .drawers
@@ -1060,6 +1120,7 @@ impl<'p> Cabinet<'_, 'p> {
             .filter(|&l| l <= room)
             .max()
             .ok_or("no slide in the standard is short enough for this cabinet")?;
+        self.hardware.push((HardwareKind::SlidePair(depth), 1));
         let height = opening.height - rules.vertical_clearance;
         // Behind a face frame the box must pass through the frame's
         // opening; the slides are set out to it on blocking.
@@ -1157,6 +1218,9 @@ impl<'p> Cabinet<'_, 'p> {
             );
         }
         self.line_boring(opening);
+        // Four pins hold each shelf.
+        self.hardware
+            .push((HardwareKind::ShelfPin, 4 * u32::from(count)));
         for i in 1..=count {
             let key = format!("{prefix}/shelf.{i}");
             let part = self
