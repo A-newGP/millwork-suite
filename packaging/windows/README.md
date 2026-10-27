@@ -21,7 +21,10 @@ application, and by hand:
 2. When the run finishes, download the `OpenCabinet-Designer-…-windows-x64`
    artifact from the run's page and unzip it.
 
-Test builds are numbered `0.0.0-dev.N`, where `N` is the run number.
+Test builds are numbered after the workspace's version plus `+dev.N`, such
+as `0.1.0-beta.1+dev.42`, where `N` is the run number. Releases are built
+by the **Release** workflow when a version tag is pushed (see
+[`docs/releasing.md`](../../docs/releasing.md)).
 
 ## The SmartScreen warning
 
@@ -36,7 +39,7 @@ cargo build --release -p opencabinet-app
 ```
 
 ```bash
-ISCC /DAppVersion=0.0.0-dev packaging/windows/opencabinet.iss
+ISCC /DAppVersion=0.1.0-beta.1+dev packaging/windows/opencabinet.iss
 ```
 
 The installer is written to `target/installer/`.
