@@ -4,7 +4,8 @@
 # Builds the Windows installer of OpenCabinet Designer, installs it, checks
 # that the program starts, uninstalls it, and keeps the installer as a
 # downloadable artifact. Run it by hand for a test build, from the Actions
-# tab ("Run workflow").
+# tab ("Run workflow"); the release workflow calls it with the version of
+# the tag being released.
 
 name: Windows installer
 
@@ -17,6 +18,12 @@ on:
       - packaging/windows/**
       - .github/workflows/windows-installer.yml
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: The version being released, which must match Cargo.toml.
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -59,10 +66,21 @@ jobs:
           $hash = (Get-FileHash inno.exe -Algorithm SHA256).Hash
           if ($hash -ne $env:INNO_SHA256) { throw "unexpected checksum $hash" }
           Start-Process .\inno.exe -Wait -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/CURRENTUSER', '/DIR=C:\inno'
+      # A release takes the tag's version; a test build is the workspace's
+      # version plus the run number, as SemVer build metadata.
       - name: Build the installer
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          $version = "0.0.0-dev.$env:GITHUB_RUN_NUMBER"
-          & C:\inno\ISCC.exe /Q "/DAppVersion=$version" "/DNumericVersion=0.0.0.$env:GITHUB_RUN_NUMBER" packaging\windows\opencabinet.iss
+          $cargo = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          if ($env:RELEASE_VERSION) {
+            if ($env:RELEASE_VERSION -ne $cargo) { throw "the tag's version $env:RELEASE_VERSION is not Cargo.toml's $cargo" }
+            $version = $env:RELEASE_VERSION
+          } else {
+            $version = "$cargo+dev.$env:GITHUB_RUN_NUMBER"
+          }
+          $numeric = ($cargo -replace '[-+].*$', '') + ".$env:GITHUB_RUN_NUMBER"
+          & C:\inno\ISCC.exe /Q "/DAppVersion=$version" "/DNumericVersion=$numeric" packaging\windows\opencabinet.iss
           if ($LASTEXITCODE -ne 0) { throw 'the installer did not build' }
           $installer = "target\installer\OpenCabinet-Designer-$version-windows-x64.exe"
           $size = (Get-Item $installer).Length

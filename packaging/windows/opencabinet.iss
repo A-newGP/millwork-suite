@@ -2,7 +2,7 @@
 ; SPDX-License-Identifier: GPL-3.0-or-later
 ;
 ; Inno Setup script for the OpenCabinet Designer installer.
-; Build: ISCC /DAppVersion=0.0.0-dev.1 /DNumericVersion=0.0.0.1 opencabinet.iss
+; Build: ISCC /DAppVersion=0.1.0-beta.1 /DNumericVersion=0.1.0.1 opencabinet.iss
 ; The executable must already be built: cargo build --release -p opencabinet-app
 
 #ifndef AppVersion
