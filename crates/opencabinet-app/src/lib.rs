@@ -15,9 +15,11 @@ use std::path::Path;
 use std::rc::Rc;
 
 use opencabinet_model::Units;
-use slint::{CloseRequestResponse, ComponentHandle, ModelRc, StandardListViewItem, VecModel};
+use slint::{
+    CloseRequestResponse, ComponentHandle, ModelRc, SharedString, StandardListViewItem, VecModel,
+};
 
-use crate::designer::{CabinetKind, Designer, Dimension};
+use crate::designer::{CabinetKind, Designer, Dimension, OpeningKind};
 use crate::dialogs::{Dialogs, FileKind, SystemDialogs};
 use opencabinet_reports::Separator;
 
@@ -57,13 +59,9 @@ pub fn create_with(dialogs: Rc<dyn Dialogs>) -> Result<AppWindow, slint::Platfor
 
     for dimension in Dimension::ALL {
         let app = Rc::clone(&app);
-        let handler = move |text: slint::SharedString| app.edit(dimension, &text);
-        match dimension {
-            Dimension::Width => window.on_width_edited(handler),
-            Dimension::Height => window.on_height_edited(handler),
-            Dimension::Depth => window.on_depth_edited(handler),
-        }
+        on_edited(&window, dimension, move |text| app.edit(dimension, &text));
     }
+    connect_room(&window, &app);
     let handle = Rc::clone(&app);
     window.on_units_chosen(move |metric| handle.choose_units(metric));
     let handle = Rc::clone(&app);
@@ -348,18 +346,42 @@ impl App {
         self.show(&window, true);
     }
 
+    /// Changes the walls, openings or placements with `change`, then shows
+    /// the result with the fields rewritten, or says why it could not.
+    fn change_room(&self, change: impl FnOnce(&mut Designer) -> Result<(), String>) {
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
+        let result = change(&mut self.designer.borrow_mut());
+        clear_errors(&window);
+        self.show(&window, true);
+        if let Err(message) = result {
+            self.status(&message);
+        }
+    }
+
+    /// Changes the walls, openings or placements with `change`, which
+    /// cannot fail, then shows the result with the fields rewritten.
+    fn update(&self, change: impl FnOnce(&mut Designer)) {
+        self.change_room(|designer| {
+            change(designer);
+            Ok(())
+        });
+    }
+
     /// Shows the designer's state; with `texts`, also rewrites the fields.
     fn show(&self, window: &AppWindow, texts: bool) {
         let designer = self.designer.borrow();
         if texts {
             window.set_label_text(designer.label().into());
-            window.set_width_text(designer.text(Dimension::Width).into());
-            window.set_height_text(designer.text(Dimension::Height).into());
-            window.set_depth_text(designer.text(Dimension::Depth).into());
         }
-        window.set_width_reading(designer.reading(Dimension::Width).into());
-        window.set_height_reading(designer.reading(Dimension::Height).into());
-        window.set_depth_reading(designer.reading(Dimension::Depth).into());
+        for dimension in Dimension::ALL {
+            if texts {
+                set_text(window, dimension, designer.text(dimension).into());
+            }
+            set_reading(window, dimension, designer.reading(dimension).into());
+        }
+        show_room(window, &designer);
         show_drawing(window, &designer);
         let list = designer.cut_list();
         let rows: Vec<ModelRc<StandardListViewItem>> = list
@@ -442,13 +464,125 @@ fn file_name(path: &Path) -> String {
     )
 }
 
-fn set_error(window: &AppWindow, dimension: Dimension, message: String) {
-    let message = message.into();
-    match dimension {
-        Dimension::Width => window.set_width_error(message),
-        Dimension::Height => window.set_height_error(message),
-        Dimension::Depth => window.set_depth_error(message),
+/// The window's text, reading, error and edit callback of each dimension's
+/// field.
+macro_rules! fields {
+    ($($dimension:ident: $text:ident, $reading:ident, $error:ident, $edited:ident;)*) => {
+        fn set_text(window: &AppWindow, dimension: Dimension, value: SharedString) {
+            match dimension {
+                $(Dimension::$dimension => window.$text(value),)*
+            }
+        }
+
+        fn set_reading(window: &AppWindow, dimension: Dimension, value: SharedString) {
+            match dimension {
+                $(Dimension::$dimension => window.$reading(value),)*
+            }
+        }
+
+        fn set_error(window: &AppWindow, dimension: Dimension, message: String) {
+            let message = message.into();
+            match dimension {
+                $(Dimension::$dimension => window.$error(message),)*
+            }
+        }
+
+        fn on_edited(
+            window: &AppWindow,
+            dimension: Dimension,
+            handler: impl FnMut(SharedString) + 'static,
+        ) {
+            match dimension {
+                $(Dimension::$dimension => window.$edited(handler),)*
+            }
+        }
+    };
+}
+
+fields! {
+    Width: set_width_text, set_width_reading, set_width_error, on_width_edited;
+    Height: set_height_text, set_height_reading, set_height_error, on_height_edited;
+    Depth: set_depth_text, set_depth_reading, set_depth_error, on_depth_edited;
+    WallLength: set_wall_length_text, set_wall_length_reading, set_wall_length_error,
+        on_wall_length_edited;
+    WallHeight: set_wall_height_text, set_wall_height_reading, set_wall_height_error,
+        on_wall_height_edited;
+    OpeningOffset: set_opening_offset_text, set_opening_offset_reading,
+        set_opening_offset_error, on_opening_offset_edited;
+    OpeningWidth: set_opening_width_text, set_opening_width_reading, set_opening_width_error,
+        on_opening_width_edited;
+    OpeningHeight: set_opening_height_text, set_opening_height_reading,
+        set_opening_height_error, on_opening_height_edited;
+    OpeningSill: set_opening_sill_text, set_opening_sill_reading, set_opening_sill_error,
+        on_opening_sill_edited;
+    PlacementOffset: set_placement_offset_text, set_placement_offset_reading,
+        set_placement_offset_error, on_placement_offset_edited;
+    PlacementElevation: set_placement_elevation_text, set_placement_elevation_reading,
+        set_placement_elevation_error, on_placement_elevation_edited;
+}
+
+/// Connects the Walls tab and the placement section to `app`.
+fn connect_room(window: &AppWindow, app: &Rc<App>) {
+    /// Calls `choose` with a list's index, when it is one.
+    fn chosen(choose: fn(&mut Designer, usize) -> bool) -> impl Fn(&mut Designer, i32) {
+        move |designer, index| {
+            if let Ok(index) = usize::try_from(index) {
+                choose(designer, index);
+            }
+        }
     }
+    let handle = Rc::clone(app);
+    window.on_tab_chosen(move |tab| handle.update(|d| d.show_walls(tab == 1)));
+    let (handle, choose) = (Rc::clone(app), chosen(Designer::select_wall));
+    window.on_wall_chosen(move |i| handle.update(|d| choose(d, i)));
+    let handle = Rc::clone(app);
+    window.on_add_wall(move || handle.update(Designer::add_wall));
+    let handle = Rc::clone(app);
+    window.on_delete_wall(move || handle.change_room(Designer::delete_wall));
+    let (handle, choose) = (Rc::clone(app), chosen(Designer::select_opening));
+    window.on_opening_chosen(move |i| handle.update(|d| choose(d, i)));
+    let handle = Rc::clone(app);
+    window.on_add_window(move || handle.change_room(|d| d.add_opening(OpeningKind::Window)));
+    let handle = Rc::clone(app);
+    window.on_add_door(move || handle.change_room(|d| d.add_opening(OpeningKind::Door)));
+    let handle = Rc::clone(app);
+    window.on_delete_opening(move || handle.change_room(Designer::delete_opening));
+    let (handle, choose) = (Rc::clone(app), chosen(Designer::select_placement));
+    window.on_placement_chosen(move |i| handle.update(|d| choose(d, i)));
+    let handle = Rc::clone(app);
+    window.on_place_cabinet(move || handle.change_room(Designer::place));
+    let handle = Rc::clone(app);
+    window.on_unplace_cabinet(move || handle.change_room(Designer::unplace));
+    let (handle, choose) = (Rc::clone(app), chosen(Designer::set_placement_wall));
+    window.on_placement_wall_chosen(move |i| handle.update(|d| choose(d, i)));
+}
+
+/// The Walls tab's lists and the edited cabinet's placements.
+fn show_room(window: &AppWindow, designer: &Designer) {
+    let list = |items: Vec<String>| {
+        let items: Vec<StandardListViewItem> = items
+            .iter()
+            .map(|i| StandardListViewItem::from(i.as_str()))
+            .collect();
+        ModelRc::new(VecModel::from(items))
+    };
+    let position = |i: Option<usize>| i.and_then(|i| i32::try_from(i).ok()).unwrap_or(-1);
+    let walls = designer.walls();
+    let names: Vec<SharedString> = walls
+        .iter()
+        .map(|w| w.split(" · ").next().unwrap_or_default().into())
+        .collect();
+    window.set_wall_names(ModelRc::new(VecModel::from(names)));
+    window.set_walls(list(walls));
+    window.set_wall_index(position(designer.selected_wall()));
+    window.set_has_wall(designer.selected_wall().is_some());
+    window.set_openings(list(designer.openings()));
+    window.set_opening_index(position(designer.selected_opening()));
+    window.set_has_opening(designer.selected_opening().is_some());
+    window.set_placements(list(designer.placements()));
+    window.set_placement_index(position(designer.selected_placement()));
+    window.set_placement_wall_index(position(designer.placement_wall()));
+    window.set_has_placement(designer.placement_wall().is_some());
 }
 
 fn clear_errors(window: &AppWindow) {

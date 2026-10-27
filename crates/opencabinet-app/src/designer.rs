@@ -22,20 +22,65 @@ use opencabinet_reports::{
 use crate::NAME_AND_VERSION;
 use crate::drawing::{self, Drawing};
 
-/// One of the cabinet's overall dimensions.
+mod room;
+
+pub use room::OpeningKind;
+
+/// A length the window edits: the cabinet's overall dimensions, the edited
+/// wall's and opening's, and where the edited placement puts the cabinet.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Dimension {
-    /// Left to right.
+    /// The cabinet, left to right.
     Width,
-    /// Floor to top.
+    /// The cabinet, floor to top.
     Height,
-    /// Front to back.
+    /// The cabinet, front to back.
     Depth,
+    /// The wall, from its start to its end.
+    WallLength,
+    /// The wall, floor to ceiling.
+    WallHeight,
+    /// From the wall's start to the opening.
+    OpeningOffset,
+    /// The opening, side to side.
+    OpeningWidth,
+    /// The opening, bottom to top.
+    OpeningHeight,
+    /// From the floor to the opening's bottom.
+    OpeningSill,
+    /// From the wall's start to the cabinet's left side.
+    PlacementOffset,
+    /// From the floor to the cabinet's bottom.
+    PlacementElevation,
 }
 
 impl Dimension {
     /// Every dimension, in the order the window shows them.
-    pub const ALL: [Self; 3] = [Self::Width, Self::Height, Self::Depth];
+    pub const ALL: [Self; 11] = [
+        Self::Width,
+        Self::Height,
+        Self::Depth,
+        Self::WallLength,
+        Self::WallHeight,
+        Self::OpeningOffset,
+        Self::OpeningWidth,
+        Self::OpeningHeight,
+        Self::OpeningSill,
+        Self::PlacementOffset,
+        Self::PlacementElevation,
+    ];
+
+    /// Whether it may be zero: offsets and heights above the floor may,
+    /// sizes may not.
+    fn may_be_zero(self) -> bool {
+        matches!(
+            self,
+            Self::OpeningOffset
+                | Self::OpeningSill
+                | Self::PlacementOffset
+                | Self::PlacementElevation
+        )
+    }
 }
 
 /// The editing state of the window: a project, the file it lives in, and
@@ -47,6 +92,7 @@ pub struct Designer {
     modified: bool,
     /// The index of the product being edited; a project always has one.
     selected: usize,
+    room_selection: room::RoomSelection,
 }
 
 impl Default for Designer {
@@ -66,6 +112,7 @@ impl Designer {
             path: None,
             modified: false,
             selected: 0,
+            room_selection: room::RoomSelection::default(),
         }
     }
 
@@ -79,12 +126,15 @@ impl Designer {
         if document.project.products.is_empty() {
             return Err("The project has no products to show yet".into());
         }
-        Ok(Self {
+        let mut designer = Self {
             document,
             path: Some(path.to_owned()),
             modified: false,
             selected: 0,
-        })
+            room_selection: room::RoomSelection::default(),
+        };
+        designer.first_selection();
+        Ok(designer)
     }
 
     /// Saves the project to `path`, which becomes its file.
@@ -194,6 +244,7 @@ impl Designer {
         let exists = index < self.document.project.products.len();
         if exists {
             self.selected = index;
+            self.cabinet_changed();
         }
         exists
     }
@@ -257,6 +308,7 @@ impl Designer {
             room.placements.retain(|p| p.product != removed.id);
         }
         self.selected = self.selected.min(project.products.len() - 1);
+        self.cabinet_changed();
         self.modified = true;
         Ok(())
     }
@@ -267,6 +319,7 @@ impl Designer {
             .project
             .products
             .insert(self.selected, product);
+        self.cabinet_changed();
         self.modified = true;
     }
 
@@ -379,25 +432,32 @@ impl Designer {
         }
     }
 
-    /// A dimension's stored value.
+    /// A dimension's stored value; `None` for a wall, opening or placement
+    /// when none is being edited.
     #[must_use]
-    pub fn get(&self, dimension: Dimension) -> Length {
+    pub fn get(&self, dimension: Dimension) -> Option<Length> {
         let product = self.product();
         match dimension {
-            Dimension::Width => product.width,
-            Dimension::Height => product.height,
-            Dimension::Depth => product.depth,
+            Dimension::Width => Some(product.width),
+            Dimension::Height => Some(product.height),
+            Dimension::Depth => Some(product.depth),
+            _ => self.room_value(dimension),
         }
     }
 
     /// Reads what the user typed into a dimension and stores it.
     ///
     /// # Errors
-    /// A message for the user when the text is not a positive length; the
-    /// stored value is then left unchanged.
+    /// A message for the user when the text is not a length, is not
+    /// positive (zero is fine for offsets and heights above the floor), or
+    /// has nothing to apply to; the stored value is then left unchanged.
     pub fn edit(&mut self, dimension: Dimension, text: &str) -> Result<(), String> {
         let length = Length::parse(text, self.units()).map_err(|e| capitalize(&e.to_string()))?;
-        if length <= Length::ZERO {
+        if dimension.may_be_zero() {
+            if length < Length::ZERO {
+                return Err("Cannot be negative".into());
+            }
+        } else if length <= Length::ZERO {
             return Err("Must be greater than zero".into());
         }
         let product = self.product_mut();
@@ -405,6 +465,7 @@ impl Designer {
             Dimension::Width => &mut product.width,
             Dimension::Height => &mut product.height,
             Dimension::Depth => &mut product.depth,
+            _ => return self.set_room_value(dimension, length),
         };
         if *field != length {
             *field = length;
@@ -413,21 +474,30 @@ impl Designer {
         Ok(())
     }
 
-    /// A dimension as text to put in its field, in the current units.
+    /// A dimension as text to put in its field, in the current units;
+    /// empty when there is nothing to edit.
     #[must_use]
     pub fn text(&self, dimension: Dimension) -> String {
         self.get(dimension)
-            .show(self.units(), self.precision())
-            .text
+            .map(|l| self.show(l))
+            .unwrap_or_default()
     }
 
     /// How a dimension was read, for the line under its field: `= 30-1/2"`,
     /// or `≈ 30-1/2"` when the display precision rounds it.
     #[must_use]
     pub fn reading(&self, dimension: Dimension) -> String {
-        let shown = self.get(dimension).show(self.units(), self.precision());
+        let Some(length) = self.get(dimension) else {
+            return String::new();
+        };
+        let shown = length.show(self.units(), self.precision());
         let sign = if shown.exact { '=' } else { '≈' };
         format!("{sign} {}", shown.text)
+    }
+
+    /// A length in the current units and precision.
+    fn show(&self, length: Length) -> String {
+        length.show(self.units(), self.precision()).text
     }
 
     /// The project's cut list, in the current units.
@@ -479,21 +549,18 @@ impl Designer {
         Ok(files.len() - 1)
     }
 
-    /// What the drawing area shows: the elevation of the wall the cabinet
-    /// being edited stands on, or the cabinet alone when it is not placed
-    /// on a wall.
+    /// What the drawing area shows: the edited wall while the walls are
+    /// shown, otherwise the wall the edited cabinet is placed on, or the
+    /// cabinet alone when it is not placed on a wall.
     #[must_use]
     pub fn drawing(&self) -> Drawing {
         let (project, library) = (&self.document.project, &self.document.library);
         let product = self.product();
-        let show = |length: Length| length.show(self.units(), self.precision()).text;
-        let wall = project
-            .rooms
-            .iter()
-            .flat_map(|r| &r.placements)
-            .find(|p| p.product == product.id)
-            .and_then(|p| p.wall);
-        if let Some(elevation) = wall.and_then(|w| elevation(project, library, w)) {
+        let show = |length: Length| self.show(length);
+        if let Some(elevation) = self
+            .shown_wall()
+            .and_then(|w| elevation(project, library, w))
+        {
             return drawing::wall(&elevation, product.id, &show);
         }
         let view = front_view(product, library).ok();
@@ -964,7 +1031,10 @@ mod tests {
     fn edits_store_exact_values_and_keep_the_last_good_one() {
         let mut designer = Designer::default();
         designer.edit(Dimension::Width, "30 1/2").unwrap();
-        assert_eq!(designer.get(Dimension::Width), Length::from_nm(774_700_000));
+        assert_eq!(
+            designer.get(Dimension::Width),
+            Some(Length::from_nm(774_700_000))
+        );
         assert_eq!(designer.reading(Dimension::Width), "= 30-1/2\"");
         assert!(designer.modified());
 
@@ -976,7 +1046,10 @@ mod tests {
             designer.edit(Dimension::Width, "0"),
             Err("Must be greater than zero".into())
         );
-        assert_eq!(designer.get(Dimension::Width), Length::from_nm(774_700_000));
+        assert_eq!(
+            designer.get(Dimension::Width),
+            Some(Length::from_nm(774_700_000))
+        );
     }
 
     #[test]
@@ -989,7 +1062,7 @@ mod tests {
         designer.set_units(Units::Imperial);
         // 600 mm is 23.622…": shown rounded, but stored exactly.
         assert_eq!(designer.reading(Dimension::Depth), "≈ 23-5/8\"");
-        assert_eq!(designer.get(Dimension::Depth), Length::from_mm(600));
+        assert_eq!(designer.get(Dimension::Depth), Some(Length::from_mm(600)));
     }
 
     #[test]
@@ -1003,7 +1076,10 @@ mod tests {
         assert_eq!(designer.title(), "cabinet.ocab — OpenCabinet Designer");
 
         let reopened = Designer::open(&path).unwrap();
-        assert_eq!(reopened.get(Dimension::Width), Length::from_inches(33));
+        assert_eq!(
+            reopened.get(Dimension::Width),
+            Some(Length::from_inches(33))
+        );
         assert_eq!(reopened.units(), Units::Metric);
         assert_eq!(reopened, designer);
     }
