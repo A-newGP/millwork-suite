@@ -8,7 +8,7 @@ use opencabinet_model::{InsertKind, Length, Library, Product, Side};
 
 use crate::front::Rect;
 use crate::rules::Rules;
-use crate::{FrameSizes, Kind, face_frame, lay_out_front};
+use crate::{Blind, FrameSizes, FrontPlan, Kind, door_hinge, face_frame, lay_out_front};
 
 /// A product seen from the front, in its own coordinates: `x` from its
 /// left side, `y` up from its bottom.
@@ -45,6 +45,8 @@ pub enum FrontKind {
     Drawer,
     /// A front that does not open.
     FalseFront,
+    /// A blind corner's fixed panel, behind the adjoining cabinet.
+    BlindPanel,
 }
 
 /// How `product` looks from the front.
@@ -53,7 +55,8 @@ pub enum FrontKind {
 /// When its type cannot be evaluated or its front cannot be laid out;
 /// an elevation then shows only its outline.
 pub fn front_view(product: &Product, library: &Library) -> Result<FrontView, String> {
-    let kind = Kind::of(&product.product_type).ok_or("this product type has no view yet")?;
+    let (kind, _) = Kind::of(&product.product_type).ok_or("this product type has no view yet")?;
+    let blind = Blind::of(product)?;
     let standard = library
         .standards
         .iter()
@@ -72,7 +75,11 @@ pub fn front_view(product: &Product, library: &Library) -> Result<FrontView, Str
         width: w,
         height: h - toe_kick,
     };
-    let (layout, fit) = lay_out_front(product, face_frame, face, &rules.fronts)?;
+    let FrontPlan {
+        layout,
+        fit,
+        blind: blind_panel,
+    } = lay_out_front(product, face_frame, face, &rules.fronts, blind)?;
 
     let mut frame = Vec::new();
     if let Some(rules) = face_frame {
@@ -99,9 +106,16 @@ pub fn front_view(product: &Product, library: &Library) -> Result<FrontView, Str
             },
         ]);
         frame.extend(layout.dividers.iter().map(|d| d.rect));
+        frame.extend(blind_panel.and_then(|(_, mullion)| mullion));
     }
 
-    let mut fronts = Vec::new();
+    let mut fronts: Vec<FrontShape> = blind_panel
+        .map(|(rect, _)| FrontShape {
+            rect,
+            kind: FrontKind::BlindPanel,
+        })
+        .into_iter()
+        .collect();
     for opening in &layout.openings {
         let insert = opening.insert;
         match insert.kind {
@@ -109,11 +123,7 @@ pub fn front_view(product: &Product, library: &Library) -> Result<FrontView, Str
                 let count = u32::from(insert.count.unwrap_or(1)).clamp(1, 2);
                 let doors = fit.fronts(opening.rect, count)?;
                 for (i, rect) in doors.into_iter().enumerate() {
-                    let hinge = match (count, i) {
-                        (2, 0) => Some(Side::Left),
-                        (2, _) => Some(Side::Right),
-                        _ => insert.hinge_side,
-                    };
+                    let hinge = door_hinge(insert, count, i, blind.map(|b| b.side));
                     fronts.push(FrontShape {
                         rect,
                         kind: FrontKind::Door { hinge },

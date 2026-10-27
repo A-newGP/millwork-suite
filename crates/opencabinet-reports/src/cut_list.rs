@@ -161,6 +161,7 @@ pub(crate) fn part_name(part: &Part) -> String {
         ("door", door) => format!("Door {}", door.trim_start_matches("door.")),
         ("drawerFront", _) => "Drawer front".into(),
         ("falseFront", _) => "False front".into(),
+        ("blindPanel", _) => "Blind panel".into(),
         ("drawerSide", "box.side.left") => "Drawer box, left side".into(),
         ("drawerSide", "box.side.right") => "Drawer box, right side".into(),
         ("drawerSubFront", _) => "Drawer box, front".into(),
@@ -172,6 +173,7 @@ pub(crate) fn part_name(part: &Part) -> String {
         ("frameRail", "rail.top") => "Face frame, top rail".into(),
         ("frameRail", "rail.bottom") => "Face frame, bottom rail".into(),
         ("frameRail", rail) => format!("Face frame, rail {}", rail.trim_start_matches("rail.")),
+        ("frameMullion", "mullion.blind") => "Face frame, blind mullion".into(),
         ("frameMullion", mullion) => format!(
             "Face frame, mullion {}",
             mullion.trim_start_matches("mullion.")
