@@ -156,9 +156,40 @@ fn the_window_edits_saves_and_reopens_a_project() {
 
     cabinet_list(&window);
     walls_and_placements(&window);
+    blind_corner(&window);
 
     window.invoke_about();
     assert!(window.get_status().contains("GNU GPL"));
+}
+
+/// A blind corner's own fields, shown only for blind corners.
+fn blind_corner(window: &AppWindow) {
+    window.set_tab_index(0);
+    assert!(!window.get_blind());
+    window.invoke_kind_chosen(3);
+    assert_eq!(window.get_kind_index(), 3);
+    assert!(window.get_blind());
+    assert_eq!(window.get_width_text(), "42\"");
+    assert_eq!(window.get_blind_side_index(), 1);
+    assert_eq!(window.get_blind_width_text(), "24\"");
+
+    // Below the visible part of the panel: edited through its callback.
+    window.invoke_blind_width_edited("27".into());
+    assert_eq!(window.get_blind_width_reading(), "= 27\"");
+    window.invoke_blind_width_edited("50".into());
+    assert_eq!(
+        window.get_blind_width_error(),
+        "Must leave room for the doors"
+    );
+    assert_eq!(window.get_blind_width_reading(), "= 27\"");
+
+    window.invoke_blind_side_chosen(0);
+    assert_eq!(window.get_blind_side_index(), 0);
+    assert!(window.get_cabinet_label().starts_with("BC"));
+
+    window.invoke_kind_chosen(0);
+    assert!(!window.get_blind());
+    assert_eq!(window.get_blind_width_error(), "");
 }
 
 /// The list of the project's cabinets, from a project whose only cabinet

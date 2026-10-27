@@ -59,6 +59,13 @@ export component AppWindow inherits Window {
     in-out property <int> kind-index;
     // 0 for slab fronts, 1 for five-piece.
     in-out property <int> style-index;
+    // Whether the cabinet is a blind corner, and its blind side: 0 for
+    // left, 1 for right.
+    in property <bool> blind;
+    in-out property <int> blind-side-index;
+    in-out property <string> blind-width-text;
+    in property <string> blind-width-reading;
+    in property <string> blind-width-error;
     in property <string> status;
     in-out property <string> width-text;
     in-out property <string> height-text;
@@ -160,6 +167,8 @@ export component AppWindow inherits Window {
     callback label-edited(text: string);
     callback kind-chosen(index: int);
     callback style-chosen(five-piece: bool);
+    callback blind-side-chosen(index: int);
+    callback blind-width-edited(text: string);
     callback new-project();
     callback open-project();
     callback save-project();
@@ -420,6 +429,26 @@ export component AppWindow inherits Window {
                     reading: root.depth-reading;
                     error: root.depth-error;
                     edited(text) => { root.depth-edited(text); }
+                }
+                if root.blind: VerticalLayout {
+                    spacing: 12px;
+                    VerticalLayout {
+                        spacing: 4px;
+                        Text { text: "Blind side"; }
+                        ComboBox {
+                            accessible-label: "Blind side";
+                            model: ["Left", "Right"];
+                            current-index <=> root.blind-side-index;
+                            selected => { root.blind-side-chosen(self.current-index); }
+                        }
+                    }
+                    LengthField {
+                        label: "Blind width";
+                        text <=> root.blind-width-text;
+                        reading: root.blind-width-reading;
+                        error: root.blind-width-error;
+                        edited(text) => { root.blind-width-edited(text); }
+                    }
                 }
                 Text { text: "Placement"; font-weight: 700; }
                 StandardListView {

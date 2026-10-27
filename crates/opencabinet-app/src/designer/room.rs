@@ -459,7 +459,7 @@ impl Designer {
     pub fn place(&mut self) -> Result<(), String> {
         let product = self.product();
         let id = product.id;
-        let hung = CabinetKind::of(&product.product_type) == Some(CabinetKind::Wall);
+        let hung = CabinetKind::of(&product.product_type).is_some_and(CabinetKind::hangs);
         let elevation = if hung {
             wall_cabinet_height()
         } else {
@@ -565,7 +565,7 @@ impl Designer {
             Dimension::PlacementElevation => {
                 self.placement().filter(|p| p.wall.is_some())?.elevation
             }
-            Dimension::Width | Dimension::Height | Dimension::Depth => None,
+            Dimension::Width | Dimension::Height | Dimension::Depth | Dimension::BlindWidth => None,
         }
     }
 
@@ -594,7 +594,9 @@ impl Designer {
             Dimension::PlacementElevation => {
                 self.placement_mut().ok_or_else(missing)?.elevation = Some(length);
             }
-            Dimension::Width | Dimension::Height | Dimension::Depth => return Err(missing()),
+            Dimension::Width | Dimension::Height | Dimension::Depth | Dimension::BlindWidth => {
+                return Err(missing());
+            }
         }
         self.modified = true;
         Ok(())

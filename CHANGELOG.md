@@ -27,12 +27,15 @@ follow [Semantic Versioning](https://semver.org/).
   into it. Face frames gain a mullion beside the panel. Doors hinge away
   from the blind side unless they say otherwise. Elevations warn when the
   cabinet on the adjoining wall leaves part of the blind panel in view or
-  stands in front of the doors.
+  stands in front of the doors. In the window, the Type list offers
+  "Blind corner base" (42" wide, 24" blind) and "Blind corner wall" (36"
+  wide, 12" blind), labeled BC and WBC, with fields for the blind side and
+  width; hiding the other side rehangs a single door away from it.
+- The sample kitchen's blind corner has a back, so it is evaluated.
 
 ### Known limitations
 
-- The window cannot create blind corner cabinets yet, nor change their
-  blind side and width; drawers in them are not supported.
+- Drawers in blind corner cabinets are not supported yet.
 
 ## [0.1.0-beta.1] - 2026-10-26
 

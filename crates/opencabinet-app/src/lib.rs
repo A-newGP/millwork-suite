@@ -14,7 +14,7 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 
-use opencabinet_model::Units;
+use opencabinet_model::{Side, Units};
 use slint::{
     CloseRequestResponse, ComponentHandle, ModelRc, SharedString, StandardListViewItem, VecModel,
 };
@@ -93,6 +93,8 @@ pub fn create_with(dialogs: Rc<dyn Dialogs>) -> Result<AppWindow, slint::Platfor
     window.on_kind_chosen(move |index| handle.choose_kind(index));
     let handle = Rc::clone(&app);
     window.on_style_chosen(move |five_piece| handle.choose_style(five_piece));
+    let handle = Rc::clone(&app);
+    window.on_blind_side_chosen(move |index| handle.choose_blind_side(index));
     let handle = Rc::clone(&app);
     window.on_new_project(move || handle.new_project());
     let handle = Rc::clone(&app);
@@ -209,6 +211,15 @@ impl App {
         self.designer.borrow_mut().set_kind(kind);
         clear_errors(&window);
         self.show(&window, true);
+    }
+
+    fn choose_blind_side(&self, index: i32) {
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
+        let side = if index == 0 { Side::Left } else { Side::Right };
+        self.designer.borrow_mut().set_blind_side(side);
+        self.show(&window, false);
     }
 
     fn choose_style(&self, five_piece: bool) {
@@ -458,6 +469,9 @@ impl App {
             .and_then(|k| CabinetKind::ALL.iter().position(|&c| c == k));
         window.set_kind_index(kind.and_then(|i| i32::try_from(i).ok()).unwrap_or(-1));
         window.set_style_index(i32::from(designer.five_piece()));
+        let blind = designer.blind_side();
+        window.set_blind(blind.is_some());
+        window.set_blind_side_index(i32::from(blind == Some(Side::Right)));
         let metric = designer.units() == Units::Metric;
         window.set_metric(metric);
         let units = if metric { "millimeters" } else { "inches" };
@@ -549,6 +563,8 @@ fields! {
     Width: set_width_text, set_width_reading, set_width_error, on_width_edited;
     Height: set_height_text, set_height_reading, set_height_error, on_height_edited;
     Depth: set_depth_text, set_depth_reading, set_depth_error, on_depth_edited;
+    BlindWidth: set_blind_width_text, set_blind_width_reading, set_blind_width_error,
+        on_blind_width_edited;
     WallLength: set_wall_length_text, set_wall_length_reading, set_wall_length_error,
         on_wall_length_edited;
     WallHeight: set_wall_height_text, set_wall_height_reading, set_wall_height_error,
