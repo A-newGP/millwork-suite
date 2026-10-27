@@ -28,9 +28,10 @@ fn inches() -> Length {
 
 #[test]
 fn the_sample_kitchen_matches_the_counts_worked_out_by_hand() {
-    // Two B30s with slab doors and two shelves, and the W30, the products
-    // the kitchen can evaluate. Both standards add 15% waste and 1" of
-    // edge band per edge.
+    // Two B30s with slab doors and two shelves, the BC42 and the W30, the
+    // products the kitchen can evaluate. Both standards add 15% waste and
+    // 1" of edge band per edge. The BC42 has no edge bands chosen, so its
+    // fronts are cut at their finished size.
     let (project, library) = kitchen();
     let bom = bill_of_materials(&project, &library, Units::Imperial, inches());
     let rows: Vec<[&str; 4]> = bom.rows.iter().map(BomRow::cells).collect();
@@ -39,25 +40,31 @@ fn the_sample_kitchen_matches_the_counts_worked_out_by_hand() {
         [
             // Per B30: sides 2 × 774.7 × 609.6, bottom 726 × 609.6,
             // stretchers 2 × 726 × 101.6, shelves 2 × 724.4125 × 584.2:
-            // 2,381,010.6 mm², twice, is 51.3 ft²; with waste 58.9 ft², or
-            // 1.8 sheets of 97" × 49".
+            // 2,381,010.6 mm², twice. The BC42: sides 2 × 774.7 × 609.6,
+            // bottom 1030.8 × 609.6, stretchers 2 × 1030.8 × 101.6:
+            // 1,782,348.5 mm². In all 6,544,369.7 mm², 70.4 ft²; with waste
+            // 81.0 ft², or 2.5 sheets of 97" × 49".
             [
                 "Sheets",
                 "White melamine 3/4\"",
-                "2 sheets",
-                "51.3 ft² of parts, 58.9 ft² with waste, on 97\" × 49\" sheets"
+                "3 sheets",
+                "70.4 ft² of parts, 81.0 ft² with waste, on 97\" × 49\" sheets"
             ],
+            // The BC42's back adds (774.7 − 8.475) × (1030.8 + 19.05), or
+            // 8.7 ft².
             [
                 "Sheets",
                 "Birch plywood 1/2\"",
                 "2 sheets",
-                "32.3 ft² of parts, 37.2 ft² with waste, on 97\" × 49\" sheets"
+                "41.0 ft² of parts, 47.1 ft² with waste, on 97\" × 49\" sheets"
             ],
+            // The BC42's door and blind panel add 771.525 × (454.025 +
+            // 606.425), or 8.8 ft².
             [
                 "Sheets",
                 "Maple plywood 3/4\"",
-                "1 sheet",
-                "27.3 ft² of parts, 31.4 ft² with waste, on 97\" × 49\" sheets"
+                "2 sheets",
+                "36.1 ft² of parts, 41.5 ft² with waste, on 97\" × 49\" sheets"
             ],
             // The W30's frame: 2 × 762 + 3 × 685.8 = 3581.4 mm, 11.8 ft;
             // with waste 4118.6 mm, 1.7 boards of 96".
@@ -76,11 +83,12 @@ fn the_sample_kitchen_matches_the_counts_worked_out_by_hand() {
                 "24 edges, with the allowance for trimming"
             ],
             ["Hardware", "Drawer slides 22\"", "2 pairs", ""],
-            // Two hinges on each of the B30s' four doors and the W30's two.
+            // Two hinges on each of the B30s' four doors, the BC42's door
+            // and the W30's two.
             [
                 "Hardware",
                 "110° clip hinge, full overlay",
-                "12",
+                "14",
                 "with mounting plates"
             ],
             [
@@ -107,7 +115,7 @@ fn metric_projects_count_in_square_meters_and_meters() {
     let quantities: Vec<&str> = bom.rows.iter().map(|r| r.quantity.as_str()).collect();
     assert_eq!(quantities[4], "12.22 m");
     assert!(
-        bom.rows[0].detail.starts_with("4.76 m² of parts"),
+        bom.rows[0].detail.starts_with("6.54 m² of parts"),
         "{}",
         bom.rows[0].detail
     );

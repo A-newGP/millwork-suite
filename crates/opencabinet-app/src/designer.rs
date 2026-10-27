@@ -13,7 +13,7 @@ use opencabinet_format::Document;
 use opencabinet_model::validate::{Issue, validate};
 use opencabinet_model::{
     EdgeBand, FrontNode, FrontStyle, Grain, Hardware, Id, Insert, InsertKind, Length, Library,
-    Method, Product, Project, Settings, SheetMaterial, Size, SplitDirection, Standard, Units,
+    Method, Product, Project, Settings, SheetMaterial, Side, Size, SplitDirection, Standard, Units,
 };
 use opencabinet_reports::elevations::elevations_dxf;
 use opencabinet_reports::{
@@ -54,11 +54,13 @@ pub enum Dimension {
     PlacementOffset,
     /// From the floor to the cabinet's bottom.
     PlacementElevation,
+    /// How much of a blind corner's front is hidden, from its blind side.
+    BlindWidth,
 }
 
 impl Dimension {
     /// Every dimension, in the order the window shows them.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Width,
         Self::Height,
         Self::Depth,
@@ -70,6 +72,7 @@ impl Dimension {
         Self::OpeningSill,
         Self::PlacementOffset,
         Self::PlacementElevation,
+        Self::BlindWidth,
     ];
 
     /// Whether it may be zero: offsets and heights above the floor may,
@@ -265,7 +268,7 @@ impl Designer {
         let (height, depth) = kind.usual_height_and_depth();
         let product = Product {
             id: Id::new(),
-            label: self.free_label(&kind.label_letter().to_string()),
+            label: self.free_label(kind.label_prefix()),
             product_type: kind.product_type().into(),
             standard: source.standard,
             width: Length::from_inches(30),
@@ -356,8 +359,9 @@ impl Designer {
     }
 
     /// Makes the cabinet another kind, with that kind's usual height, depth
-    /// and front, and a label that starts with its letter. The width, the
-    /// materials and the style of the fronts stay.
+    /// and front, and a label that starts with its letters. The width
+    /// stays, except that a blind corner takes its usual width and blind
+    /// part; the materials and the style of the fronts stay.
     pub fn set_kind(&mut self, kind: CabinetKind) {
         if self.kind() == Some(kind) {
             return;
@@ -368,10 +372,10 @@ impl Designer {
             .chars()
             .skip_while(|c| !c.is_ascii_digit())
             .collect();
-        let wanted = format!("{}{number}", kind.label_letter());
+        let wanted = format!("{}{number}", kind.label_prefix());
         // Keep the number unless another cabinet has that label.
         let label = if number.is_empty() || self.cabinet_labeled(&wanted) {
-            self.free_label(&kind.label_letter().to_string())
+            self.free_label(kind.label_prefix())
         } else {
             wanted
         };
@@ -380,10 +384,54 @@ impl Designer {
         product.product_type = kind.product_type().into();
         product.height = height;
         product.depth = depth;
+        if let Some(width) = kind.usual_width() {
+            product.width = width;
+        }
         product.front = Some(kind.usual_front());
         product.label = label;
+        // Only a blind corner has a blind part, on the right at first.
+        product.parameters.remove(BLIND_SIDE);
+        product.parameters.remove(BLIND_WIDTH);
+        if let Some(blind) = kind.usual_blind_width() {
+            product.parameters.insert(BLIND_SIDE.into(), "right".into());
+            product
+                .parameters
+                .insert(BLIND_WIDTH.into(), blind.nm().into());
+        }
         // The new front keeps the style the fronts had.
         self.set_five_piece(five_piece);
+        self.modified = true;
+    }
+
+    /// Which side of a blind corner is hidden; `None` for other kinds.
+    #[must_use]
+    pub fn blind_side(&self) -> Option<Side> {
+        if self.kind().is_none_or(|k| k.usual_blind_width().is_none()) {
+            return None;
+        }
+        let side = self.product().parameters.get(BLIND_SIDE)?;
+        serde_json::from_value(side.clone()).ok()
+    }
+
+    /// Hides the other side of a blind corner. A single door's stored
+    /// hinge side is cleared, so that it hinges away from the blind part.
+    pub fn set_blind_side(&mut self, side: Side) {
+        if self.blind_side().is_none() || self.blind_side() == Some(side) {
+            return;
+        }
+        let product = self.product_mut();
+        let value = match side {
+            Side::Left => "left",
+            Side::Right => "right",
+        };
+        product.parameters.insert(BLIND_SIDE.into(), value.into());
+        if let Some(front) = &mut product.front {
+            visit_mut(front, &mut |insert| {
+                if insert.kind == InsertKind::Doors && insert.count.unwrap_or(1) == 1 {
+                    insert.hinge_side = None;
+                }
+            });
+        }
         self.modified = true;
     }
 
@@ -449,6 +497,14 @@ impl Designer {
             Dimension::Width => Some(product.width),
             Dimension::Height => Some(product.height),
             Dimension::Depth => Some(product.depth),
+            Dimension::BlindWidth => {
+                self.blind_side()?;
+                product
+                    .parameters
+                    .get(BLIND_WIDTH)
+                    .and_then(serde_json::Value::as_i64)
+                    .map(Length::from_nm)
+            }
             _ => self.room_value(dimension),
         }
     }
@@ -468,6 +524,9 @@ impl Designer {
         } else if length <= Length::ZERO {
             return Err("Must be greater than zero".into());
         }
+        if dimension == Dimension::BlindWidth {
+            return self.set_blind_width(length);
+        }
         let product = self.product_mut();
         let field = match dimension {
             Dimension::Width => &mut product.width,
@@ -477,6 +536,25 @@ impl Designer {
         };
         if *field != length {
             *field = length;
+            self.modified = true;
+        }
+        Ok(())
+    }
+
+    /// Stores a blind corner's blind width, which must leave room for the
+    /// doors.
+    fn set_blind_width(&mut self, length: Length) -> Result<(), String> {
+        let Some(old) = self.get(Dimension::BlindWidth) else {
+            return Err("Only a blind corner has a blind width".into());
+        };
+        if length >= self.product().width {
+            return Err("Must leave room for the doors".into());
+        }
+        if old != length {
+            let product = self.product_mut();
+            product
+                .parameters
+                .insert(BLIND_WIDTH.into(), length.nm().into());
             self.modified = true;
         }
         Ok(())
@@ -901,6 +979,10 @@ fn base_cabinet(library: &Library) -> Product {
     }
 }
 
+/// The parameters of a blind corner (RFC-0001 §6).
+const BLIND_SIDE: &str = "blindSide";
+const BLIND_WIDTH: &str = "blindWidth";
+
 /// The kinds of cabinet the window offers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CabinetKind {
@@ -910,11 +992,23 @@ pub enum CabinetKind {
     Wall,
     /// Floor to near the ceiling: pantries and oven towers.
     Tall,
+    /// A base cabinet in a corner, partly hidden by the cabinet on the
+    /// adjoining wall.
+    BlindBase,
+    /// A wall cabinet in a corner, partly hidden by the cabinet on the
+    /// adjoining wall.
+    BlindWall,
 }
 
 impl CabinetKind {
     /// Every kind, in the order the window lists them.
-    pub const ALL: [Self; 3] = [Self::Base, Self::Wall, Self::Tall];
+    pub const ALL: [Self; 5] = [
+        Self::Base,
+        Self::Wall,
+        Self::Tall,
+        Self::BlindBase,
+        Self::BlindWall,
+    ];
 
     /// The name the window shows.
     #[must_use]
@@ -923,6 +1017,8 @@ impl CabinetKind {
             Self::Base => "Base",
             Self::Wall => "Wall",
             Self::Tall => "Tall",
+            Self::BlindBase => "Blind corner base",
+            Self::BlindWall => "Blind corner wall",
         }
     }
 
@@ -931,6 +1027,34 @@ impl CabinetKind {
             Self::Base => "base-cabinet@1",
             Self::Wall => "wall-cabinet@1",
             Self::Tall => "tall-cabinet@1",
+            Self::BlindBase => "blind-corner-base@1",
+            Self::BlindWall => "blind-corner-wall@1",
+        }
+    }
+
+    /// Whether it hangs on the wall rather than standing on the floor.
+    pub(crate) fn hangs(self) -> bool {
+        matches!(self, Self::Wall | Self::BlindWall)
+    }
+
+    /// How much of a blind corner's front is hidden at first: as much as
+    /// the adjoining cabinet is deep, 24" for a base and 12" for a wall
+    /// cabinet. Other kinds have none.
+    fn usual_blind_width(self) -> Option<Length> {
+        match self {
+            Self::BlindBase => Some(Length::from_inches(24)),
+            Self::BlindWall => Some(Length::from_inches(12)),
+            Self::Base | Self::Wall | Self::Tall => None,
+        }
+    }
+
+    /// The width a blind corner starts at, 42" or 36", so its door is a
+    /// usual 18" or 24"; other kinds keep the width they had.
+    fn usual_width(self) -> Option<Length> {
+        match self {
+            Self::BlindBase => Some(Length::from_inches(42)),
+            Self::BlindWall => Some(Length::from_inches(36)),
+            Self::Base | Self::Wall | Self::Tall => None,
         }
     }
 
@@ -940,23 +1064,32 @@ impl CabinetKind {
             .find(|k| k.product_type() == product_type)
     }
 
-    /// The first letter of the shop's usual labels: B30, W30, T24.
-    fn label_letter(self) -> char {
-        self.name().chars().next().expect("names are not empty")
+    /// The letters of the shop's usual labels: B30, W30, T24, BC42,
+    /// WBC36.
+    fn label_prefix(self) -> &'static str {
+        match self {
+            Self::Base => "B",
+            Self::Wall => "W",
+            Self::Tall => "T",
+            Self::BlindBase => "BC",
+            Self::BlindWall => "WBC",
+        }
     }
 
     /// 34-1/2" × 24" for a base cabinet, 30" × 12" for a wall cabinet,
-    /// 84" × 24" for a tall one.
+    /// 84" × 24" for a tall one; blind corners as base and wall cabinets.
     fn usual_height_and_depth(self) -> (Length, Length) {
         match self {
-            Self::Base => (inches(69, 2), Length::from_inches(24)),
-            Self::Wall => (Length::from_inches(30), Length::from_inches(12)),
+            Self::Base | Self::BlindBase => (inches(69, 2), Length::from_inches(24)),
+            Self::Wall | Self::BlindWall => (Length::from_inches(30), Length::from_inches(12)),
             Self::Tall => (Length::from_inches(84), Length::from_inches(24)),
         }
     }
 
     /// A drawer over a pair of doors for a base cabinet; a pair of doors
-    /// with two shelves for a wall cabinet, or four for a tall one.
+    /// with two shelves for a wall cabinet, or four for a tall one. A blind
+    /// corner has one door, which hinges away from the blind part, with a
+    /// shelf behind it, or two in a wall cabinet.
     fn usual_front(self) -> FrontNode {
         let leaf = |size, kind, count, shelves| FrontNode {
             id: Id::new(),
@@ -993,6 +1126,8 @@ impl CabinetKind {
             },
             Self::Wall => leaf(None, InsertKind::Doors, Some(2), Some(2)),
             Self::Tall => leaf(None, InsertKind::Doors, Some(2), Some(4)),
+            Self::BlindBase => leaf(None, InsertKind::Doors, Some(1), Some(1)),
+            Self::BlindWall => leaf(None, InsertKind::Doors, Some(1), Some(2)),
         }
     }
 }
@@ -1091,6 +1226,94 @@ mod tests {
             4
         );
         assert!(designer.modified());
+    }
+
+    #[test]
+    fn a_blind_corner_starts_with_its_usual_width_and_blind_part() {
+        let mut designer = Designer::default();
+        assert_eq!(designer.blind_side(), None);
+        assert_eq!(designer.text(Dimension::BlindWidth), "");
+
+        designer.set_kind(CabinetKind::BlindBase);
+        assert_eq!(designer.label(), "BC1");
+        assert_eq!(designer.reading(Dimension::Width), "= 42\"");
+        assert_eq!(designer.blind_side(), Some(Side::Right));
+        assert_eq!(designer.reading(Dimension::BlindWidth), "= 24\"");
+        let list = designer.cut_list();
+        assert_eq!(list.problems, Vec::<String>::new());
+        let fronts: Vec<&str> = list
+            .rows
+            .iter()
+            .map(|r| r.part.as_str())
+            .filter(|p| p.starts_with("Blind") || p.starts_with("Door") || p.starts_with("Shelf"))
+            .collect();
+        assert_eq!(fronts, ["Blind panel", "Door 1", "Shelf 1"]);
+
+        designer.set_kind(CabinetKind::BlindWall);
+        assert_eq!(designer.label(), "WBC1");
+        assert_eq!(designer.reading(Dimension::Width), "= 36\"");
+        assert_eq!(designer.reading(Dimension::BlindWidth), "= 12\"");
+        assert_eq!(designer.cut_list().problems, Vec::<String>::new());
+
+        // Another kind keeps the width and drops the blind part.
+        designer.set_kind(CabinetKind::Base);
+        assert_eq!(designer.reading(Dimension::Width), "= 36\"");
+        assert!(designer.product().parameters.is_empty());
+        assert_eq!(designer.blind_side(), None);
+    }
+
+    #[test]
+    fn the_blind_width_must_leave_room_for_the_doors() {
+        let mut designer = Designer::default();
+        assert_eq!(
+            designer.edit(Dimension::BlindWidth, "12"),
+            Err("Only a blind corner has a blind width".into())
+        );
+        designer.set_kind(CabinetKind::BlindBase);
+        assert_eq!(
+            designer.edit(Dimension::BlindWidth, "42"),
+            Err("Must leave room for the doors".into())
+        );
+        assert_eq!(
+            designer.edit(Dimension::BlindWidth, "0"),
+            Err("Must be greater than zero".into())
+        );
+        designer.edit(Dimension::BlindWidth, "27").unwrap();
+        assert_eq!(designer.reading(Dimension::BlindWidth), "= 27\"");
+        // A door 42" − 27" = 15" wide, less the 1/8" gap.
+        let list = designer.cut_list();
+        let door = list.rows.iter().find(|r| r.part == "Door 1").unwrap();
+        assert_eq!(door.width, "14-7/8\"");
+    }
+
+    #[test]
+    fn hiding_the_other_side_rehangs_the_door() {
+        // The sample's BC42 is blind on the right, its door hinged on the
+        // left.
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/kitchen.ocab");
+        let mut designer = Designer::open(&fixture).unwrap();
+        designer.select(2);
+        assert_eq!(designer.kind(), Some(CabinetKind::BlindBase));
+        assert_eq!(designer.blind_side(), Some(Side::Right));
+        let hinge = |designer: &Designer| {
+            designer
+                .product()
+                .front
+                .as_ref()
+                .unwrap()
+                .insert
+                .as_ref()
+                .unwrap()
+                .hinge_side
+        };
+        assert_eq!(hinge(&designer), Some(Side::Left));
+
+        designer.set_blind_side(Side::Left);
+        assert_eq!(designer.blind_side(), Some(Side::Left));
+        assert_eq!(hinge(&designer), None);
+        assert!(designer.modified());
+        let view = designer.drawing();
+        assert!(!view.marks.is_empty(), "the door's hinge marks are drawn");
     }
 
     #[test]
