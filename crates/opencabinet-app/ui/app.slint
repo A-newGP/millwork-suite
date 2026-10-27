@@ -124,6 +124,10 @@ export component AppWindow inherits Window {
     // evaluated.
     in property <[[StandardListViewItem]]> cut-rows;
     in property <string> cut-problems;
+    // The bill of materials: one row of text cells per thing to buy, and
+    // how it was counted.
+    in property <[[StandardListViewItem]]> material-rows;
+    in property <string> material-notes;
 
     callback width-edited(text: string);
     callback height-edited(text: string);
@@ -163,6 +167,8 @@ export component AppWindow inherits Window {
     // `true` for semicolons between fields, as Excel in Spanish expects.
     callback export-cut-list(semicolon: bool);
     callback export-cut-list-pdf();
+    // `true` for semicolons between fields, as for the cut list.
+    callback export-materials(semicolon: bool);
     callback export-parts-dxf();
     callback export-elevations-pdf();
     callback export-elevations-dxf();
@@ -190,6 +196,17 @@ export component AppWindow inherits Window {
                 MenuItem {
                     title: "CSV with semicolons, for Excel in Spanish…";
                     activated => { root.export-cut-list(true); }
+                }
+            }
+            Menu {
+                title: "Export materials";
+                MenuItem {
+                    title: "CSV with commas…";
+                    activated => { root.export-materials(false); }
+                }
+                MenuItem {
+                    title: "CSV with semicolons, for Excel in Spanish…";
+                    activated => { root.export-materials(true); }
                 }
             }
             MenuItem {
@@ -525,26 +542,53 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                VerticalLayout {
-                    padding: 8px;
-                    spacing: 4px;
-                    Text { text: "Cut list"; font-weight: 700; }
-                    if root.cut-problems != "": Text {
-                        text: root.cut-problems;
-                        color: #b26a00;
-                        font-size: 12px;
-                        wrap: word-wrap;
+                TabWidget {
+                    height: 320px;
+
+                    Tab {
+                        title: "Cut list";
+                        VerticalLayout {
+                            padding: 8px;
+                            spacing: 4px;
+                            if root.cut-problems != "": Text {
+                                text: root.cut-problems;
+                                color: #b26a00;
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
+                            StandardTableView {
+                                accessible-label: "Cut list";
+                                columns: [
+                                    { title: "Product" }, { title: "Part" }, { title: "Material" },
+                                    { title: "Qty" }, { title: "Length" }, { title: "Width" },
+                                    { title: "Thick." }, { title: "Cut length" },
+                                    { title: "Cut width" }, { title: "Edges" },
+                                ];
+                                rows: root.cut-rows;
+                            }
+                        }
                     }
-                    StandardTableView {
-                        accessible-label: "Cut list";
-                        height: 260px;
-                        columns: [
-                            { title: "Product" }, { title: "Part" }, { title: "Material" },
-                            { title: "Qty" }, { title: "Length" }, { title: "Width" },
-                            { title: "Thick." }, { title: "Cut length" }, { title: "Cut width" },
-                            { title: "Edges" },
-                        ];
-                        rows: root.cut-rows;
+
+                    Tab {
+                        title: "Materials";
+                        VerticalLayout {
+                            padding: 8px;
+                            spacing: 4px;
+                            Text {
+                                text: root.material-notes;
+                                color: Palette.foreground.transparentize(40%);
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
+                            StandardTableView {
+                                accessible-label: "Materials";
+                                columns: [
+                                    { title: "Section" }, { title: "Item" },
+                                    { title: "Quantity" }, { title: "Detail" },
+                                ];
+                                rows: root.material-rows;
+                            }
+                        }
                     }
                 }
             }

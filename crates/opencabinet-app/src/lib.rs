@@ -105,23 +105,7 @@ pub fn create_with(dialogs: Rc<dyn Dialogs>) -> Result<AppWindow, slint::Platfor
     window.on_save_project_as(move || {
         handle.save(true);
     });
-    let handle = Rc::clone(&app);
-    window.on_export_cut_list(move |semicolon| {
-        let separator = if semicolon {
-            Separator::Semicolon
-        } else {
-            Separator::Comma
-        };
-        handle.export_cut_list(separator);
-    });
-    let handle = Rc::clone(&app);
-    window.on_export_cut_list_pdf(move || handle.export_cut_list_pdf());
-    let handle = Rc::clone(&app);
-    window.on_export_parts_dxf(move || handle.export_parts_dxf());
-    let handle = Rc::clone(&app);
-    window.on_export_elevations_pdf(move || handle.export_elevations_pdf());
-    let handle = Rc::clone(&app);
-    window.on_export_elevations_dxf(move || handle.export_elevations_dxf());
+    connect_exports(&window, &app);
     let handle = Rc::clone(&app);
     window.on_about(move || {
         handle.status(&format!(
@@ -296,6 +280,17 @@ impl App {
         }
     }
 
+    fn export_materials(&self, separator: Separator) {
+        let suggested = format!("{} materials.csv", self.designer.borrow().project_name());
+        let Some(path) = self.dialogs.save_path(&suggested, FileKind::Materials) else {
+            return;
+        };
+        match self.designer.borrow().export_materials(&path, separator) {
+            Ok(()) => self.status(&format!("Exported the materials to {}", file_name(&path))),
+            Err(message) => self.status(&message),
+        }
+    }
+
     fn export_cut_list(&self, separator: Separator) {
         let suggested = format!("{} cut list.csv", self.designer.borrow().label());
         let Some(path) = self.dialogs.save_path(&suggested, FileKind::CutList) else {
@@ -434,6 +429,21 @@ impl App {
             .collect();
         window.set_cut_rows(ModelRc::new(VecModel::from(rows)));
         window.set_cut_problems(list.problems.join("\n").into());
+        let materials = designer.bill_of_materials();
+        let rows: Vec<ModelRc<StandardListViewItem>> = materials
+            .rows
+            .iter()
+            .map(|row| {
+                let cells: Vec<StandardListViewItem> = row
+                    .cells()
+                    .into_iter()
+                    .map(StandardListViewItem::from)
+                    .collect();
+                ModelRc::new(VecModel::from(cells))
+            })
+            .collect();
+        window.set_material_rows(ModelRc::new(VecModel::from(rows)));
+        window.set_material_notes(materials.notes.join("\n").into());
         let cabinets: Vec<StandardListViewItem> = designer
             .cabinets()
             .iter()
@@ -555,6 +565,36 @@ fields! {
         set_placement_offset_error, on_placement_offset_edited;
     PlacementElevation: set_placement_elevation_text, set_placement_elevation_reading,
         set_placement_elevation_error, on_placement_elevation_edited;
+}
+
+/// Connects the File menu's exports to `app`.
+fn connect_exports(window: &AppWindow, app: &Rc<App>) {
+    let handle = Rc::clone(app);
+    window.on_export_cut_list(move |semicolon| {
+        let separator = if semicolon {
+            Separator::Semicolon
+        } else {
+            Separator::Comma
+        };
+        handle.export_cut_list(separator);
+    });
+    let handle = Rc::clone(app);
+    window.on_export_cut_list_pdf(move || handle.export_cut_list_pdf());
+    let handle = Rc::clone(app);
+    window.on_export_materials(move |semicolon| {
+        let separator = if semicolon {
+            Separator::Semicolon
+        } else {
+            Separator::Comma
+        };
+        handle.export_materials(separator);
+    });
+    let handle = Rc::clone(app);
+    window.on_export_parts_dxf(move || handle.export_parts_dxf());
+    let handle = Rc::clone(app);
+    window.on_export_elevations_pdf(move || handle.export_elevations_pdf());
+    let handle = Rc::clone(app);
+    window.on_export_elevations_dxf(move || handle.export_elevations_dxf());
 }
 
 /// Connects the Walls tab and the placement section to `app`.

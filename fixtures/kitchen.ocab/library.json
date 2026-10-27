@@ -84,6 +84,10 @@
           "grooveDepth": 9525000,
           "setback": 6350000
         },
+        "billOfMaterials": {
+          "edgeBandAllowance": 25400000,
+          "wastePercent": 15
+        },
         "case": {
           "stretcherWidth": 101600000
         },
@@ -162,6 +166,10 @@
           "construction": "grooved",
           "grooveDepth": 9525000,
           "setback": 6350000
+        },
+        "billOfMaterials": {
+          "edgeBandAllowance": 25400000,
+          "wastePercent": 15
         },
         "case": {
           "stretcherWidth": 101600000

@@ -44,6 +44,21 @@ pub struct Rules {
     /// Where doors are bored for hinges.
     #[serde(default)]
     pub hinges: Option<Hinges>,
+    /// What the bill of materials adds to the parts' own sizes.
+    #[serde(default)]
+    pub bill_of_materials: Option<BillOfMaterials>,
+}
+
+/// What the bill of materials adds to the parts' own sizes, as the shop
+/// buys: sheets and boards lost to the saw and to defects, and edge band
+/// trimmed off each edge.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BillOfMaterials {
+    /// Added to the parts' area or length, in percent.
+    pub waste_percent: u32,
+    /// Added to the edge band of each banded edge.
+    pub edge_band_allowance: Length,
 }
 
 /// The 32 mm system: two columns of holes in each side, for shelf pins and
