@@ -35,7 +35,7 @@ impl Dialogs for Answers {
         let extension = match kind {
             FileKind::Project => "ocab",
             FileKind::CutList => "csv",
-            FileKind::CutListPdf => "pdf",
+            FileKind::CutListPdf | FileKind::ElevationsPdf => "pdf",
         };
         self.path
             .borrow()
@@ -43,7 +43,7 @@ impl Dialogs for Answers {
             .map(|p| p.with_extension(extension))
     }
 
-    fn dxf_folder(&self) -> Option<PathBuf> {
+    fn folder(&self, _title: &str) -> Option<PathBuf> {
         self.path.borrow().as_ref().map(|p| p.with_extension("dxf"))
     }
 
@@ -287,4 +287,16 @@ fn walls_and_placements(window: &AppWindow) {
     );
     window.invoke_unplace_cabinet();
     assert!(!window.get_has_placement());
+
+    // The elevations export as a PDF and as one DXF per wall.
+    window.invoke_export_elevations_pdf();
+    assert_eq!(
+        window.get_status(),
+        "Exported the elevations to test-cabinet.pdf"
+    );
+    window.invoke_export_elevations_dxf();
+    assert_eq!(
+        window.get_status(),
+        "Exported the elevations of 1 wall as DXF to test-cabinet.dxf"
+    );
 }

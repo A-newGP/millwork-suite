@@ -19,24 +19,11 @@
 
 use std::collections::BTreeSet;
 
-use chrono::{Local, NaiveDate, TimeZone, Utc};
-use dxf::entities::{Circle, Entity, EntityType, Line, LwPolyline, Text};
-use dxf::enums::{AcadVersion, Units};
-use dxf::tables::Layer;
-use dxf::{Color, Drawing, LwPolylineVertex, Point};
 use opencabinet_eval::{Face, Operation, Part, evaluate};
 use opencabinet_model::{Grain, Length, Library, Project};
 
 use crate::cut_list::part_name;
-
-/// A DXF file, named for the part it draws.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DxfFile {
-    /// A file name, such as `B30 - Left side.dxf`.
-    pub name: String,
-    /// The file's bytes.
-    pub contents: Vec<u8>,
-}
+use crate::sketch::{DxfFile, Shape, safe_file_name, write_dxf};
 
 /// The name of the file with every part.
 pub const ALL_PARTS: &str = "all-parts.dxf";
@@ -67,88 +54,15 @@ pub fn parts_dxf(project: &Project, library: &Library) -> Result<Vec<DxfFile>, S
         }
         files.push(DxfFile {
             name: file,
-            contents: write(&sketch.shapes)?,
+            contents: write_dxf(&sketch.shapes)?,
         });
     }
     let layout = lay_out(&sketches, &evaluation.parts, library);
     files.push(DxfFile {
         name: ALL_PARTS.into(),
-        contents: write(&layout)?,
+        contents: write_dxf(&layout)?,
     });
     Ok(files)
-}
-
-/// Something drawn, in millimeters.
-#[derive(Clone, Debug, PartialEq)]
-enum Shape {
-    /// A closed polyline.
-    Polygon {
-        layer: String,
-        points: Vec<(f64, f64)>,
-    },
-    Circle {
-        layer: String,
-        center: (f64, f64),
-        radius: f64,
-    },
-    Line {
-        layer: String,
-        from: (f64, f64),
-        to: (f64, f64),
-    },
-    /// Left-aligned text, `at` its baseline's start.
-    Text {
-        layer: String,
-        at: (f64, f64),
-        height: f64,
-        text: String,
-    },
-}
-
-impl Shape {
-    fn moved(&self, (dx, dy): (f64, f64)) -> Self {
-        let shift = |(x, y): (f64, f64)| (x + dx, y + dy);
-        match self {
-            Self::Polygon { layer, points } => Self::Polygon {
-                layer: layer.clone(),
-                points: points.iter().copied().map(shift).collect(),
-            },
-            Self::Circle {
-                layer,
-                center,
-                radius,
-            } => Self::Circle {
-                layer: layer.clone(),
-                center: shift(*center),
-                radius: *radius,
-            },
-            Self::Line { layer, from, to } => Self::Line {
-                layer: layer.clone(),
-                from: shift(*from),
-                to: shift(*to),
-            },
-            Self::Text {
-                layer,
-                at,
-                height,
-                text,
-            } => Self::Text {
-                layer: layer.clone(),
-                at: shift(*at),
-                height: *height,
-                text: text.clone(),
-            },
-        }
-    }
-
-    fn layer(&self) -> &str {
-        match self {
-            Self::Polygon { layer, .. }
-            | Self::Circle { layer, .. }
-            | Self::Line { layer, .. }
-            | Self::Text { layer, .. } => layer,
-        }
-    }
 }
 
 /// A part's drawing and the box it takes, label included.
@@ -256,6 +170,7 @@ fn sketch(part: &Part, project: &Project, library: &Library) -> (String, Sketch)
             at: (0.0, y),
             height: TEXT_HEIGHT,
             text: line.clone(),
+            centered: false,
         });
     }
     let top = base + 2.0 * LINE_SPACING + TEXT_HEIGHT;
@@ -286,6 +201,7 @@ fn sketch(part: &Part, project: &Project, library: &Library) -> (String, Sketch)
                 at: (end + 5.0, y - TEXT_HEIGHT / 2.0),
                 height: TEXT_HEIGHT,
                 text: "grain".into(),
+                centered: false,
             },
         ]);
         bottom = y - TEXT_HEIGHT;
@@ -428,6 +344,7 @@ fn lay_out(sketches: &[(String, Sketch)], parts: &[Part], library: &Library) -> 
             at: (0.0, row_top - 2.0 * TEXT_HEIGHT),
             height: 2.0 * TEXT_HEIGHT,
             text: name.into(),
+            centered: false,
         });
         let row_bottom = row_top - 3.0 * TEXT_HEIGHT - height;
         let mut left = 0.0;
@@ -442,181 +359,6 @@ fn lay_out(sketches: &[(String, Sketch)], parts: &[Part], library: &Library) -> 
     shapes
 }
 
-/// A file name without the characters Windows, macOS and Linux reject.
-fn safe_file_name(name: &str) -> String {
-    name.chars()
-        .map(|c| match c {
-            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
-            c if c.is_control() => '_',
-            c => c,
-        })
-        .collect::<String>()
-        .trim_end_matches(['.', ' '])
-        .to_owned()
-}
-
-/// The `AutoCAD` Color Index of a layer: white for outlines, red for holes,
-/// blue for grooves, gray for labels.
-fn color(layer: &str) -> u8 {
-    if layer.starts_with("HOLE_") {
-        1
-    } else if layer.starts_with("GROOVE_") {
-        5
-    } else if layer == LABEL {
-        8
-    } else {
-        7
-    }
-}
-
-/// The shapes as a DXF 2000 file in millimeters.
-fn write(shapes: &[Shape]) -> Result<Vec<u8>, String> {
-    let mut drawing = Drawing::new();
-    drawing.header.version = AcadVersion::R2000;
-    drawing.header.default_drawing_units = Units::Millimeters;
-    // The same parts always give the same bytes: the crate would stamp the
-    // time and random identifiers. The dates are local wall-clock times in
-    // the file, so a fixed one reads the same in every time zone.
-    let epoch = NaiveDate::from_ymd_opt(2000, 1, 1)
-        .and_then(|d| d.and_hms_opt(0, 0, 0))
-        .expect("a valid date");
-    let local = Local
-        .from_local_datetime(&epoch)
-        .earliest()
-        .ok_or("no local time for the fixed date")?;
-    drawing.header.creation_date = local;
-    drawing.header.update_date = local;
-    drawing.header.creation_date_universal = Utc.from_utc_datetime(&epoch);
-    drawing.header.update_date_universal = Utc.from_utc_datetime(&epoch);
-    drawing.header.fingerprint_guid = uuid::Uuid::nil();
-    drawing.header.version_guid = uuid::Uuid::nil();
-
-    let mut layers: Vec<&str> = vec![OUTLINE];
-    for shape in shapes {
-        if !layers.contains(&shape.layer()) {
-            layers.push(shape.layer());
-        }
-    }
-    for name in layers {
-        drawing.add_layer(Layer {
-            name: name.into(),
-            color: Color::from_index(color(name)),
-            ..Default::default()
-        });
-    }
-
-    let point = |(x, y): (f64, f64)| Point::new(x, y, 0.0);
-    for shape in shapes {
-        let specific = match shape {
-            Shape::Polygon { points, .. } => {
-                let mut polyline = LwPolyline {
-                    vertices: points
-                        .iter()
-                        .map(|&(x, y)| LwPolylineVertex {
-                            x,
-                            y,
-                            ..Default::default()
-                        })
-                        .collect(),
-                    ..Default::default()
-                };
-                polyline.set_is_closed(true);
-                EntityType::LwPolyline(polyline)
-            }
-            Shape::Circle { center, radius, .. } => EntityType::Circle(Circle {
-                center: point(*center),
-                radius: *radius,
-                ..Default::default()
-            }),
-            Shape::Line { from, to, .. } => EntityType::Line(Line {
-                p1: point(*from),
-                p2: point(*to),
-                ..Default::default()
-            }),
-            Shape::Text {
-                at, height, text, ..
-            } => EntityType::Text(Text {
-                location: point(*at),
-                text_height: *height,
-                value: text.clone(),
-                ..Default::default()
-            }),
-        };
-        let mut entity = Entity::new(specific);
-        entity.common.layer = shape.layer().into();
-        drawing.add_entity(entity);
-    }
-    drawing.normalize();
-
-    let mut bytes = Vec::new();
-    drawing
-        .save(&mut bytes)
-        .map_err(|e| format!("the DXF could not be written: {e}"))?;
-    fix_table_headers(&bytes)
-}
-
-/// Gives each table header the handle and owner the `dxf` crate leaves
-/// out, which readers otherwise have to repair (ADR-0015), and moves the
-/// handle seed past the new handles.
-fn fix_table_headers(bytes: &[u8]) -> Result<Vec<u8>, String> {
-    const EOL: &[u8] = b"\r\n";
-    fn code(line: &[u8]) -> Option<&str> {
-        std::str::from_utf8(line).ok().map(str::trim)
-    }
-    let lines: Vec<&[u8]> = bytes
-        .strip_suffix(EOL)
-        .unwrap_or(bytes)
-        .split(|&b| b == b'\n')
-        .map(|line| line.strip_suffix(b"\r").unwrap_or(line))
-        .collect();
-    if !lines.len().is_multiple_of(2) {
-        return Err("the DXF has a group code without a value".into());
-    }
-    let pairs: Vec<(&[u8], &[u8])> = lines.chunks(2).map(|p| (p[0], p[1])).collect();
-    let seed_at = pairs
-        .iter()
-        .position(|&(c, v)| code(c) == Some("9") && v == b"$HANDSEED")
-        .ok_or("the DXF has no handle seed")?
-        + 1;
-    let mut seed = std::str::from_utf8(pairs[seed_at].1)
-        .ok()
-        .and_then(|v| u64::from_str_radix(v.trim(), 16).ok())
-        .ok_or("the DXF's handle seed is not a handle")?;
-
-    let mut out: Vec<(Vec<u8>, Vec<u8>)> = Vec::with_capacity(pairs.len() + 32);
-    let mut i = 0;
-    while i < pairs.len() {
-        let (c, v) = pairs[i];
-        out.push((c.to_vec(), v.to_vec()));
-        let opens_table = code(c) == Some("0") && v == b"TABLE";
-        if opens_table && pairs.get(i + 1).is_some_and(|&(c, _)| code(c) == Some("2")) {
-            let (name_code, name) = pairs[i + 1];
-            out.push((name_code.to_vec(), name.to_vec()));
-            out.push((b"  5".to_vec(), format!("{seed:X}").into_bytes()));
-            out.push((b"330".to_vec(), b"0".to_vec()));
-            seed += 1;
-            i += 2;
-            continue;
-        }
-        i += 1;
-    }
-    let seed_line = out
-        .iter()
-        .position(|(c, v)| code(c) == Some("9") && v.as_slice() == b"$HANDSEED")
-        .expect("copied from the input")
-        + 1;
-    out[seed_line].1 = format!("{seed:X}").into_bytes();
-
-    let mut fixed = Vec::with_capacity(bytes.len() + 32 * 12);
-    for (c, v) in out {
-        fixed.extend_from_slice(&c);
-        fixed.extend_from_slice(EOL);
-        fixed.extend_from_slice(&v);
-        fixed.extend_from_slice(EOL);
-    }
-    Ok(fixed)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -626,12 +368,6 @@ mod tests {
         assert_eq!(mm_text(Length::from_mm(12)), "12");
         assert_eq!(mm_text(Length::from_nm(9_525_000)), "9.525");
         assert_eq!(mm_text(Length::from_nm(-1_500_000)), "-1.5");
-    }
-
-    #[test]
-    fn file_names_avoid_characters_systems_reject() {
-        assert_eq!(safe_file_name("B30 - Door 1"), "B30 - Door 1");
-        assert_eq!(safe_file_name("W/30: \"top\"?."), "W_30_ _top__");
     }
 
     #[test]

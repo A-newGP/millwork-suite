@@ -15,8 +15,9 @@ use opencabinet_model::{
     EdgeBand, FrontNode, FrontStyle, Grain, Hardware, Id, Insert, InsertKind, Length, Library,
     Method, Product, Project, Settings, SheetMaterial, Size, SplitDirection, Standard, Units,
 };
+use opencabinet_reports::elevations::elevations_dxf;
 use opencabinet_reports::{
-    CutList, Fonts, Paper, Separator, cut_list, cut_list_pdf, parts_dxf, to_csv,
+    CutList, Fonts, Paper, Separator, cut_list, cut_list_pdf, elevations_pdf, parts_dxf, to_csv,
 };
 
 use crate::NAME_AND_VERSION;
@@ -179,6 +180,12 @@ impl Designer {
     #[must_use]
     pub fn issues(&self) -> Vec<Issue> {
         validate(&self.document.project, &self.document.library)
+    }
+
+    /// The project's name, such as "Smith kitchen".
+    #[must_use]
+    pub fn project_name(&self) -> &str {
+        &self.document.project.name
     }
 
     /// The label of the product being edited, such as "B30".
@@ -547,6 +554,46 @@ impl Designer {
             std::fs::write(folder.join(&file.name), &file.contents).map_err(fail)?;
         }
         Ok(files.len() - 1)
+    }
+
+    /// Writes the elevations of every wall as a PDF, one wall to a page, on
+    /// the paper usual for the project's units.
+    ///
+    /// # Errors
+    /// A message for the user when there are no walls, or the PDF cannot
+    /// be made or written.
+    pub fn export_elevations_pdf(&self, path: &Path, fonts: &Fonts) -> Result<(), String> {
+        let (project, library) = (&self.document.project, &self.document.library);
+        let show = |length: Length| self.show(length);
+        let paper = Paper::for_units(self.units());
+        let pdf = elevations_pdf(
+            project,
+            library,
+            self.units(),
+            &show,
+            &project.name,
+            NAME_AND_VERSION,
+            paper,
+            fonts,
+        )?;
+        std::fs::write(path, pdf).map_err(|e| format!("Cannot export the elevations: {e}"))
+    }
+
+    /// Writes a DXF of every wall's elevation into `folder`, replacing
+    /// files of the same name; gives how many walls.
+    ///
+    /// # Errors
+    /// A message for the user when there are no walls, or a file cannot
+    /// be written.
+    pub fn export_elevations_dxf(&self, folder: &Path) -> Result<usize, String> {
+        let show = |length: Length| self.show(length);
+        let files = elevations_dxf(&self.document.project, &self.document.library, &show)?;
+        let fail = |e: std::io::Error| format!("Cannot export the elevations: {e}");
+        std::fs::create_dir_all(folder).map_err(fail)?;
+        for file in &files {
+            std::fs::write(folder.join(&file.name), &file.contents).map_err(fail)?;
+        }
+        Ok(files.len())
     }
 
     /// What the drawing area shows: the edited wall while the walls are

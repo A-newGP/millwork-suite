@@ -164,6 +164,8 @@ export component AppWindow inherits Window {
     callback export-cut-list(semicolon: bool);
     callback export-cut-list-pdf();
     callback export-parts-dxf();
+    callback export-elevations-pdf();
+    callback export-elevations-dxf();
     callback about();
     callback quit();
 
@@ -193,6 +195,17 @@ export component AppWindow inherits Window {
             MenuItem {
                 title: "Export parts as DXF…";
                 activated => { root.export-parts-dxf(); }
+            }
+            Menu {
+                title: "Export elevations";
+                MenuItem {
+                    title: "PDF…";
+                    activated => { root.export-elevations-pdf(); }
+                }
+                MenuItem {
+                    title: "DXF…";
+                    activated => { root.export-elevations-dxf(); }
+                }
             }
             MenuSeparator { }
             MenuItem { title: "Quit"; activated => { root.quit(); } }
